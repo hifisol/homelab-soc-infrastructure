@@ -1,0 +1,84 @@
+#!/usr/bin/env python3
+# Wazuh Integration: Forward RITA alerts to Discord
+# Place in /var/ossec/integrations/ with permissions 750 root:wazuh
+
+import sys
+import json
+import requests
+
+WEBHOOK_URL = "https://discord.com/api/webhooks/YOUR_WEBHOOK_ID/YOUR_WEBHOOK_TOKEN"
+
+def main():
+    alert_file = sys.argv[1] if len(sys.argv) > 1 else None
+
+    if not alert_file:
+        sys.exit(1)
+
+    try:
+        with open(alert_file) as f:
+            data = json.load(f)
+    except:
+        sys.exit(1)
+
+    alert = data.get("parameters", {}).get("alert", data)
+    rule = alert.get("rule", {})
+    agent = alert.get("agent", {})
+    alert_data = alert.get("data", {})
+
+    level = rule.get("level", 0)
+    rule_id = rule.get("id", "N/A")
+    description = rule.get("description", "No description")
+    agent_name = agent.get("name", "manager")
+    timestamp = alert.get("timestamp", "N/A")
+
+    # Extract RITA-specific fields
+    src_ip = alert_data.get("src_ip", "N/A")
+    dst_ip = alert_data.get("dst_ip", "N/A")
+    score = alert_data.get("score", "N/A")
+    alert_type = alert_data.get("type", "unknown")
+    details = alert_data.get("details", "")
+
+    # Set color based on alert type and level
+    if level >= 12:
+        color = 15158332  # Red
+        emoji = "\U0001f534"
+    elif level >= 10:
+        color = 15105570  # Orange
+        emoji = "\U0001f7e0"
+    else:
+        color = 3447003   # Blue
+        emoji = "\U0001f535"
+
+    # Format alert type
+    type_labels = {
+        "beacon": "Beacon (C2)",
+        "long_connection": "Long Connection",
+        "blacklist_src": "Blacklisted Source",
+        "blacklist_dst": "Blacklisted Destination",
+        "strobe": "Port Scan"
+    }
+    type_label = type_labels.get(alert_type, alert_type)
+
+    payload = {
+        "embeds": [{
+            "title": f"{emoji} RITA Alert - {type_label}",
+            "color": color,
+            "fields": [
+                {"name": "Source IP", "value": src_ip, "inline": True},
+                {"name": "Destination IP", "value": dst_ip, "inline": True},
+                {"name": "Score", "value": str(score), "inline": True},
+                {"name": "Rule", "value": f"{rule_id} (Level {level})", "inline": True},
+                {"name": "Agent", "value": agent_name, "inline": True},
+                {"name": "Details", "value": details[:200] if details else "N/A", "inline": False}
+            ],
+            "footer": {"text": f"RITA Network Threat Analysis | {timestamp}"}
+        }]
+    }
+
+    try:
+        requests.post(WEBHOOK_URL, json=payload, timeout=10)
+    except:
+        pass
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,225 @@
+---
+# =============================================================================
+# AD Lab - Teardown Playbook
+# =============================================================================
+# Destroys lab VMs and LXC containers. Templates (VMID 100-109) are NEVER
+# touched by this playbook.
+#
+# Usage:
+#   ansible-playbook playbooks/ad-lab-teardown.yml                         # Full teardown (VMs + LXC + bridge)
+#   ansible-playbook playbooks/ad-lab-teardown.yml --tags kali             # Destroy single VM
+#   ansible-playbook playbooks/ad-lab-teardown.yml --tags dc,kali,commando # Destroy specific VMs
+#   ansible-playbook playbooks/ad-lab-teardown.yml --tags parrot-lxc       # Destroy LXC only
+# =============================================================================
+
+# =============================================================================
+# PLAY 1: Destroy Lab VMs and LXC Containers
+# =============================================================================
+- name: Teardown AD Lab VMs and Containers
+  hosts: proxmox-host
+  become: yes
+  gather_facts: no
+  vars_files:
+    - ../vars/vault.yml
+    - ../vars/ad-lab.yml
+
+  tasks:
+    # --- AD-DC-01 ---
+    - name: Stop AD-DC-01 if running
+      ansible.builtin.shell: "qm stop {{ lab_vms.ad_dc_01.vmid }} --skiplock 1"
+      failed_when: false
+      tags: [dc]
+
+    - name: Destroy AD-DC-01
+      ansible.builtin.shell: "qm destroy {{ lab_vms.ad_dc_01.vmid }} --purge 1 --destroy-unreferenced-disks 1"
+      register: dc_destroy
+      failed_when: false
+      tags: [dc]
+
+    - name: AD-DC-01 teardown result
+      ansible.builtin.debug:
+        msg: "{{ 'Destroyed' if dc_destroy.rc == 0 else 'Not found (already removed)' }}: AD-DC-01 (VMID {{ lab_vms.ad_dc_01.vmid }})"
+      tags: [dc]
+
+    # --- KALI-01 ---
+    - name: Stop KALI-01 if running
+      ansible.builtin.shell: "qm stop {{ lab_vms.kali_01.vmid }} --skiplock 1"
+      failed_when: false
+      tags: [kali]
+
+    - name: Destroy KALI-01
+      ansible.builtin.shell: "qm destroy {{ lab_vms.kali_01.vmid }} --purge 1 --destroy-unreferenced-disks 1"
+      register: kali_destroy
+      failed_when: false
+      tags: [kali]
+
+    - name: KALI-01 teardown result
+      ansible.builtin.debug:
+        msg: "{{ 'Destroyed' if kali_destroy.rc == 0 else 'Not found (already removed)' }}: KALI-01 (VMID {{ lab_vms.kali_01.vmid }})"
+      tags: [kali]
+
+    # --- COMMANDO-01 ---
+    - name: Stop COMMANDO-01 if running
+      ansible.builtin.shell: "qm stop {{ lab_vms.commando_01.vmid }} --skiplock 1"
+      failed_when: false
+      tags: [commando]
+
+    - name: Destroy COMMANDO-01
+      ansible.builtin.shell: "qm destroy {{ lab_vms.commando_01.vmid }} --purge 1 --destroy-unreferenced-disks 1"
+      register: commando_destroy
+      failed_when: false
+      tags: [commando]
+
+    - name: COMMANDO-01 teardown result
+      ansible.builtin.debug:
+        msg: "{{ 'Destroyed' if commando_destroy.rc == 0 else 'Not found (already removed)' }}: COMMANDO-01 (VMID {{ lab_vms.commando_01.vmid }})"
+      tags: [commando]
+
+    # --- PARROT-01 ---
+    - name: Stop PARROT-01 if running
+      ansible.builtin.shell: "qm stop {{ lab_vms.parrot_01.vmid }} --skiplock 1"
+      failed_when: false
+      tags: [parrot]
+
+    - name: Destroy PARROT-01
+      ansible.builtin.shell: "qm destroy {{ lab_vms.parrot_01.vmid }} --purge 1 --destroy-unreferenced-disks 1"
+      register: parrot_destroy
+      failed_when: false
+      tags: [parrot]
+
+    - name: PARROT-01 teardown result
+      ansible.builtin.debug:
+        msg: "{{ 'Destroyed' if parrot_destroy.rc == 0 else 'Not found (already removed)' }}: PARROT-01 (VMID {{ lab_vms.parrot_01.vmid }})"
+      tags: [parrot]
+
+    # --- UBUNTU-AD-01 ---
+    - name: Stop UBUNTU-AD-01 if running
+      ansible.builtin.shell: "qm stop {{ lab_vms.ubuntu_ad_01.vmid }} --skiplock 1"
+      failed_when: false
+      tags: [ubuntu-ad]
+
+    - name: Destroy UBUNTU-AD-01
+      ansible.builtin.shell: "qm destroy {{ lab_vms.ubuntu_ad_01.vmid }} --purge 1 --destroy-unreferenced-disks 1"
+      register: ubuntu_ad_destroy
+      failed_when: false
+      tags: [ubuntu-ad]
+
+    - name: UBUNTU-AD-01 teardown result
+      ansible.builtin.debug:
+        msg: "{{ 'Destroyed' if ubuntu_ad_destroy.rc == 0 else 'Not found (already removed)' }}: UBUNTU-AD-01 (VMID {{ lab_vms.ubuntu_ad_01.vmid }})"
+      tags: [ubuntu-ad]
+
+    # --- DRAGONOS-01 ---
+    - name: Stop DRAGONOS-01 if running
+      ansible.builtin.shell: "qm stop {{ lab_vms.dragonos_01.vmid }} --skiplock 1"
+      failed_when: false
+      tags: [dragonos]
+
+    - name: Destroy DRAGONOS-01
+      ansible.builtin.shell: "qm destroy {{ lab_vms.dragonos_01.vmid }} --purge 1 --destroy-unreferenced-disks 1"
+      register: dragonos_destroy
+      failed_when: false
+      tags: [dragonos]
+
+    - name: DRAGONOS-01 teardown result
+      ansible.builtin.debug:
+        msg: "{{ 'Destroyed' if dragonos_destroy.rc == 0 else 'Not found (already removed)' }}: DRAGONOS-01 (VMID {{ lab_vms.dragonos_01.vmid }})"
+      tags: [dragonos]
+
+    # --- BLACKARCH-01 ---
+    - name: Stop BLACKARCH-01 if running
+      ansible.builtin.shell: "qm stop {{ lab_vms.blackarch_01.vmid }} --skiplock 1"
+      failed_when: false
+      tags: [blackarch]
+
+    - name: Destroy BLACKARCH-01
+      ansible.builtin.shell: "qm destroy {{ lab_vms.blackarch_01.vmid }} --purge 1 --destroy-unreferenced-disks 1"
+      register: blackarch_destroy
+      failed_when: false
+      tags: [blackarch]
+
+    - name: BLACKARCH-01 teardown result
+      ansible.builtin.debug:
+        msg: "{{ 'Destroyed' if blackarch_destroy.rc == 0 else 'Not found (already removed)' }}: BLACKARCH-01 (VMID {{ lab_vms.blackarch_01.vmid }})"
+      tags: [blackarch]
+
+    # --- SECONION-01 ---
+    - name: Stop SECONION-01 if running
+      ansible.builtin.shell: "qm stop {{ lab_vms.seconion_01.vmid }} --skiplock 1"
+      failed_when: false
+      tags: [seconion]
+
+    - name: Destroy SECONION-01
+      ansible.builtin.shell: "qm destroy {{ lab_vms.seconion_01.vmid }} --purge 1 --destroy-unreferenced-disks 1"
+      register: seconion_destroy
+      failed_when: false
+      tags: [seconion]
+
+    - name: SECONION-01 teardown result
+      ansible.builtin.debug:
+        msg: "{{ 'Destroyed' if seconion_destroy.rc == 0 else 'Not found (already removed)' }}: SECONION-01 (VMID {{ lab_vms.seconion_01.vmid }})"
+      tags: [seconion]
+
+    # --- PARROT-LXC-01 ---
+    - name: Stop ParrotOS LXC container if running
+      ansible.builtin.shell: "pct stop {{ lab_lxc.parrot_lxc_01.ctid }}"
+      failed_when: false
+      tags: [parrot-lxc]
+
+    - name: Destroy ParrotOS LXC container
+      ansible.builtin.shell: "pct destroy {{ lab_lxc.parrot_lxc_01.ctid }} --purge 1 --destroy-unreferenced-disks 1"
+      register: lxc_destroy
+      failed_when: false
+      tags: [parrot-lxc]
+
+    - name: ParrotOS LXC teardown result
+      ansible.builtin.debug:
+        msg: "{{ 'Destroyed' if lxc_destroy.rc == 0 else 'Not found (already removed)' }}: {{ lab_lxc.parrot_lxc_01.hostname }} (CTID {{ lab_lxc.parrot_lxc_01.ctid }})"
+      tags: [parrot-lxc]
+
+# =============================================================================
+# PLAY 2: Remove Lab Bridge (optional — only runs with 'network' tag or full run)
+# =============================================================================
+- name: Remove Lab Network Bridge
+  hosts: proxmox-host
+  become: yes
+  gather_facts: no
+  vars_files:
+    - ../vars/vault.yml
+    - ../vars/ad-lab.yml
+
+  tasks:
+    - name: Check if vmbr2 exists
+      ansible.builtin.shell: "ip link show {{ lab_bridge }}"
+      register: bridge_check
+      failed_when: false
+      changed_when: false
+      tags: [network]
+
+    - name: Remove vmbr2 from /etc/network/interfaces
+      ansible.builtin.blockinfile:
+        path: /etc/network/interfaces
+        marker: "# {mark} ANSIBLE MANAGED - AD LAB BRIDGE"
+        state: absent
+      when: bridge_check.rc == 0
+      tags: [network]
+
+    - name: Apply network changes
+      ansible.builtin.shell: "ifreload -a"
+      when: bridge_check.rc == 0
+      tags: [network]
+
+    - name: Bridge removal result
+      ansible.builtin.debug:
+        msg: "{{ lab_bridge }} {{ 'removed' if bridge_check.rc == 0 else 'not present (already removed)' }}"
+      tags: [network]
+
+    # --- Teardown Summary ---
+    - name: Show teardown summary
+      ansible.builtin.debug:
+        msg:
+          - "=== AD Lab Teardown Complete ==="
+          - "Templates (VMID 100-109) preserved"
+          - "ISOs preserved"
+          - "Run ad-lab-deploy.yml to rebuild the lab"
+      tags: [always]

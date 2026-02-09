@@ -1,0 +1,369 @@
+---
+- name: CIS Debian 11 Phase 1 Remediation - WLANPI
+  hosts: wlanpi_target
+  become: yes
+
+  vars:
+    ssh_port: 22
+    allowed_ssh_users: "wlanpi deploy-svc"
+
+  tasks:
+    # ====================================
+    # SSH HARDENING
+    # ====================================
+    - name: SSH - Disable root login
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^#?PermitRootLogin'
+        line: 'PermitRootLogin no'
+        state: present
+      notify: restart ssh
+
+    - name: SSH - Disable password authentication (key-only)
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^#?PasswordAuthentication'
+        line: 'PasswordAuthentication no'
+        state: present
+      notify: restart ssh
+
+    - name: SSH - Disable empty passwords
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^#?PermitEmptyPasswords'
+        line: 'PermitEmptyPasswords no'
+        state: present
+      notify: restart ssh
+
+    - name: SSH - Set max auth tries
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^#?MaxAuthTries'
+        line: 'MaxAuthTries 4'
+        state: present
+      notify: restart ssh
+
+    - name: SSH - Disable X11 forwarding
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^#?X11Forwarding'
+        line: 'X11Forwarding no'
+        state: present
+      notify: restart ssh
+
+    - name: SSH - Set client alive interval
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^#?ClientAliveInterval'
+        line: 'ClientAliveInterval 300'
+        state: present
+      notify: restart ssh
+
+    - name: SSH - Set client alive count max
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^#?ClientAliveCountMax'
+        line: 'ClientAliveCountMax 0'
+        state: present
+      notify: restart ssh
+
+    - name: SSH - Use strong ciphers
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^#?Ciphers'
+        line: 'Ciphers chacha20-poly1305@openssh.com,aes256-gcm@openssh.com,aes128-gcm@openssh.com,aes256-ctr,aes192-ctr,aes128-ctr'
+        state: present
+      notify: restart ssh
+
+    - name: SSH - Use strong MACs
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^#?MACs'
+        line: 'MACs hmac-sha2-512-etm@openssh.com,hmac-sha2-256-etm@openssh.com,hmac-sha2-512,hmac-sha2-256'
+        state: present
+      notify: restart ssh
+
+    - name: SSH - Use strong key exchange algorithms
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^#?KexAlgorithms'
+        line: 'KexAlgorithms curve25519-sha256,curve25519-sha256@libssh.org,diffie-hellman-group14-sha256,diffie-hellman-group16-sha512,diffie-hellman-group18-sha512,ecdh-sha2-nistp521,ecdh-sha2-nistp384,ecdh-sha2-nistp256,diffie-hellman-group-exchange-sha256'
+        state: present
+      notify: restart ssh
+
+    # ====================================
+    # PACKAGE MANAGEMENT
+    # ====================================
+    - name: Install required security packages
+      apt:
+        name:
+          - auditd
+          - audispd-plugins
+          - aide
+          - aide-common
+          - ufw
+          - libpam-pwquality
+          - unattended-upgrades
+        state: present
+        update_cache: yes
+
+    - name: Remove unnecessary packages
+      apt:
+        name:
+          - telnet
+          - rsh-client
+          - rsh-redone-client
+          - nis
+        state: absent
+        autoremove: yes
+
+    # ====================================
+    # AUTOMATIC UPDATES
+    # ====================================
+    - name: Configure unattended-upgrades
+      copy:
+        dest: /etc/apt/apt.conf.d/50unattended-upgrades
+        content: |
+          Unattended-Upgrade::Allowed-Origins {
+              "${distro_id}:${distro_codename}-security";
+              "${distro_id}ESMApps:${distro_codename}-apps-security";
+              "${distro_id}ESM:${distro_codename}-infra-security";
+          };
+          Unattended-Upgrade::AutoFixInterruptedDpkg "true";
+          Unattended-Upgrade::MinimalSteps "true";
+          Unattended-Upgrade::Remove-Unused-Kernel-Packages "true";
+          Unattended-Upgrade::Remove-Unused-Dependencies "true";
+          Unattended-Upgrade::Automatic-Reboot "false";
+        mode: '0644'
+
+    - name: Enable automatic updates
+      copy:
+        dest: /etc/apt/apt.conf.d/20auto-upgrades
+        content: |
+          APT::Periodic::Update-Package-Lists "1";
+          APT::Periodic::Unattended-Upgrade "1";
+          APT::Periodic::AutocleanInterval "7";
+        mode: '0644'
+
+    # ====================================
+    # FILE PERMISSIONS
+    # ====================================
+    - name: Set permissions on /etc/passwd
+      file:
+        path: /etc/passwd
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: Set permissions on /etc/shadow
+      file:
+        path: /etc/shadow
+        owner: root
+        group: shadow
+        mode: '0640'
+
+    - name: Set permissions on /etc/group
+      file:
+        path: /etc/group
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: Set permissions on /etc/gshadow
+      file:
+        path: /etc/gshadow
+        owner: root
+        group: shadow
+        mode: '0640'
+
+    - name: Set permissions on /etc/ssh/sshd_config
+      file:
+        path: /etc/ssh/sshd_config
+        owner: root
+        group: root
+        mode: '0600'
+
+    - name: Set permissions on /boot/grub/grub.cfg
+      file:
+        path: /boot/grub/grub.cfg
+        owner: root
+        group: root
+        mode: '0600'
+      ignore_errors: yes
+
+    # ====================================
+    # AUDITD CONFIGURATION
+    # ====================================
+    - name: Enable and start auditd service
+      systemd:
+        name: auditd
+        enabled: yes
+        state: started
+
+    - name: Configure auditd - max log file size
+      lineinfile:
+        path: /etc/audit/auditd.conf
+        regexp: '^max_log_file\s*='
+        line: 'max_log_file = 8'
+        state: present
+
+    - name: Configure auditd - max log file action
+      lineinfile:
+        path: /etc/audit/auditd.conf
+        regexp: '^max_log_file_action\s*='
+        line: 'max_log_file_action = keep_logs'
+        state: present
+
+    - name: Configure auditd - space left action
+      lineinfile:
+        path: /etc/audit/auditd.conf
+        regexp: '^space_left_action\s*='
+        line: 'space_left_action = email'
+        state: present
+
+    - name: Add audit rules for authentication events
+      copy:
+        dest: /etc/audit/rules.d/auth.rules
+        content: |
+          # Authentication events
+          -w /var/log/faillog -p wa -k logins
+          -w /var/log/lastlog -p wa -k logins
+          -w /var/log/tallylog -p wa -k logins
+        mode: '0640'
+      notify: restart auditd
+
+    - name: Add audit rules for session initiation
+      copy:
+        dest: /etc/audit/rules.d/session.rules
+        content: |
+          # Session initiation
+          -w /var/run/utmp -p wa -k session
+          -w /var/log/wtmp -p wa -k logins
+          -w /var/log/btmp -p wa -k logins
+        mode: '0640'
+      notify: restart auditd
+
+    - name: Add audit rules for system configuration
+      copy:
+        dest: /etc/audit/rules.d/system.rules
+        content: |
+          # System configuration
+          -w /etc/passwd -p wa -k identity
+          -w /etc/group -p wa -k identity
+          -w /etc/shadow -p wa -k identity
+          -w /etc/gshadow -p wa -k identity
+          -w /etc/sudoers -p wa -k sudoers
+          -w /etc/sudoers.d/ -p wa -k sudoers
+        mode: '0640'
+      notify: restart auditd
+
+    # ====================================
+    # FIREWALL (UFW)
+    # ====================================
+    - name: UFW - Allow SSH
+      ufw:
+        rule: allow
+        port: '{{ ssh_port }}'
+        proto: tcp
+
+    - name: UFW - Set default incoming policy
+      ufw:
+        direction: incoming
+        policy: deny
+
+    - name: UFW - Set default outgoing policy
+      ufw:
+        direction: outgoing
+        policy: allow
+
+    - name: UFW - Enable firewall
+      ufw:
+        state: enabled
+
+    # ====================================
+    # PASSWORD POLICIES
+    # ====================================
+    - name: Configure password quality requirements
+      lineinfile:
+        path: /etc/security/pwquality.conf
+        regexp: '^#?\s*{{ item.key }}\s*='
+        line: '{{ item.key }} = {{ item.value }}'
+        state: present
+      loop:
+        - { key: 'minlen', value: '14' }
+        - { key: 'dcredit', value: '-1' }
+        - { key: 'ucredit', value: '-1' }
+        - { key: 'ocredit', value: '-1' }
+        - { key: 'lcredit', value: '-1' }
+
+    - name: Set password remember in PAM
+      lineinfile:
+        path: /etc/pam.d/common-password
+        regexp: '^password\s+required\s+pam_pwhistory.so'
+        line: 'password required pam_pwhistory.so remember=5'
+        insertafter: '^password\s+requisite\s+pam_pwquality.so'
+
+    - name: Set password hashing algorithm
+      lineinfile:
+        path: /etc/pam.d/common-password
+        regexp: '^password\s+\[success=1 default=ignore\]\s+pam_unix.so'
+        line: 'password [success=1 default=ignore] pam_unix.so obscure use_authtok try_first_pass yescrypt sha512'
+
+    # ====================================
+    # KERNEL PARAMETERS
+    # ====================================
+    - name: Configure kernel parameters for security
+      sysctl:
+        name: "{{ item.name }}"
+        value: "{{ item.value }}"
+        state: present
+        sysctl_set: yes
+        reload: yes
+      loop:
+        - { name: 'net.ipv4.ip_forward', value: '0' }
+        - { name: 'net.ipv4.conf.all.send_redirects', value: '0' }
+        - { name: 'net.ipv4.conf.default.send_redirects', value: '0' }
+        - { name: 'net.ipv4.conf.all.accept_source_route', value: '0' }
+        - { name: 'net.ipv4.conf.default.accept_source_route', value: '0' }
+        - { name: 'net.ipv4.conf.all.accept_redirects', value: '0' }
+        - { name: 'net.ipv4.conf.default.accept_redirects', value: '0' }
+        - { name: 'net.ipv4.conf.all.secure_redirects', value: '0' }
+        - { name: 'net.ipv4.conf.default.secure_redirects', value: '0' }
+        - { name: 'net.ipv4.conf.all.log_martians', value: '1' }
+        - { name: 'net.ipv4.conf.default.log_martians', value: '1' }
+        - { name: 'net.ipv4.icmp_echo_ignore_broadcasts', value: '1' }
+        - { name: 'net.ipv4.icmp_ignore_bogus_error_responses', value: '1' }
+        - { name: 'net.ipv4.conf.all.rp_filter', value: '1' }
+        - { name: 'net.ipv4.conf.default.rp_filter', value: '1' }
+        - { name: 'net.ipv4.tcp_syncookies', value: '1' }
+        - { name: 'net.ipv6.conf.all.accept_ra', value: '0' }
+        - { name: 'net.ipv6.conf.default.accept_ra', value: '0' }
+        - { name: 'net.ipv6.conf.all.accept_redirects', value: '0' }
+        - { name: 'net.ipv6.conf.default.accept_redirects', value: '0' }
+        - { name: 'kernel.randomize_va_space', value: '2' }
+
+    # ====================================
+    # DISABLE UNNECESSARY SERVICES
+    # ====================================
+    - name: Disable unnecessary services
+      systemd:
+        name: "{{ item }}"
+        enabled: no
+        state: stopped
+      loop:
+        - avahi-daemon
+        - cups
+        - isc-dhcp-server
+        - isc-dhcp-server6
+        - rpcbind
+        - rsync
+      ignore_errors: yes
+
+  handlers:
+    - name: restart ssh
+      systemd:
+        name: ssh
+        state: restarted
+
+    - name: restart auditd
+      command: service auditd restart

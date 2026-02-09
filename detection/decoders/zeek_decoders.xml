@@ -1,0 +1,67 @@
+<!--
+  Zeek Network Security Monitor - Wazuh Decoders
+  Location: /var/ossec/etc/decoders/zeek_decoders.xml
+  
+  Parses Zeek TSV format logs. Uses zeek.* namespace for fields
+  to avoid conflicts with Wazuh static fields.
+-->
+
+<decoder name="zeek">
+  <prematch>^worker-|^manager\t|^proxy-</prematch>
+</decoder>
+
+<!-- CONN.LOG - Network Connection Decoder -->
+<decoder name="zeek-conn">
+  <parent>zeek</parent>
+  <regex type="pcre2">^(\S+)\t([\d.]+)\t(\S+)\t(\d+\.\d+\.\d+\.\d+)\t(\d+)\t(\d+\.\d+\.\d+\.\d+)\t(\d+)\t(\w+)\t(\S*)\t([\d.-]+)\t(\d+|-)\t(\d+|-)\t(\S+)</regex>
+  <order>zeek.node,zeek.ts,zeek.uid,zeek.srcip,zeek.srcport,zeek.dstip,zeek.dstport,zeek.proto,zeek.service,zeek.duration,zeek.orig_bytes,zeek.resp_bytes,zeek.conn_state</order>
+</decoder>
+
+<!-- DNS.LOG - DNS Query Decoder -->
+<decoder name="zeek-dns">
+  <parent>zeek</parent>
+  <regex type="pcre2">^(\S+)\t([\d.]+)\t(\S+)\t(\d+\.\d+\.\d+\.\d+)\t(\d+)\t(\d+\.\d+\.\d+\.\d+)\t(\d+)\t(\w+)\t\S+\t[\d.-]+\t([^\t]+)\t\S+\t\S+\t\S+\t(\S+)\t(\S+)\t(\S+)</regex>
+  <order>zeek.node,zeek.ts,zeek.uid,zeek.srcip,zeek.srcport,zeek.dstip,zeek.dstport,zeek.proto,zeek.query,zeek.qtype_name,zeek.rcode,zeek.rcode_name</order>
+</decoder>
+
+<!-- HTTP.LOG - HTTP Transaction Decoder -->
+<decoder name="zeek-http">
+  <parent>zeek</parent>
+  <regex type="pcre2">^(\S+)\t([\d.]+)\t(\S+)\t(\d+\.\d+\.\d+\.\d+)\t(\d+)\t(\d+\.\d+\.\d+\.\d+)\t(\d+)\t\d+\t(\S+)\t([^\t]+)\t([^\t]+)\t[^\t]*\t[^\t]*\t([^\t]*)\t[^\t]*\t\d+\t\d+\t(\d+|-)</regex>
+  <order>zeek.node,zeek.ts,zeek.uid,zeek.srcip,zeek.srcport,zeek.dstip,zeek.dstport,zeek.method,zeek.host,zeek.uri,zeek.user_agent,zeek.status_code</order>
+</decoder>
+
+<!-- SSL.LOG - SSL/TLS Certificate Decoder -->
+<decoder name="zeek-ssl">
+  <parent>zeek</parent>
+  <regex type="pcre2">^(\S+)\t([\d.]+)\t(\S+)\t(\d+\.\d+\.\d+\.\d+)\t(\d+)\t(\d+\.\d+\.\d+\.\d+)\t(\d+)\t(\S+)\t(\S+)\t[^\t]*\t([^\t]*)\t[^\t]*\t[^\t]*\t[^\t]*\t(\S+)\t[^\t]*\t[^\t]*\t[^\t]*\t[^\t]*\t(\S+)</regex>
+  <order>zeek.node,zeek.ts,zeek.uid,zeek.srcip,zeek.srcport,zeek.dstip,zeek.dstport,zeek.ssl_version,zeek.cipher,zeek.server_name,zeek.established,zeek.validation_status</order>
+</decoder>
+
+<!-- NOTICE.LOG - Security Notice Decoder -->
+<decoder name="zeek-notice">
+  <parent>zeek</parent>
+  <regex type="pcre2">^(\S+)\t([\d.]+)\t(\S+)\t(\d+\.\d+\.\d+\.\d+|-)\t(\d+|-)\t(\d+\.\d+\.\d+\.\d+|-)\t(\d+|-)\t[^\t]*\t[^\t]*\t[^\t]*\t(\S+)\t([^\t]+)\t([^\t]+)\t([^\t]*)</regex>
+  <order>zeek.node,zeek.ts,zeek.uid,zeek.srcip,zeek.srcport,zeek.dstip,zeek.dstport,zeek.notice_type,zeek.notice_msg,zeek.notice_sub,zeek.notice_src</order>
+</decoder>
+
+<!-- SSH.LOG - SSH Connection Decoder -->
+<decoder name="zeek-ssh">
+  <parent>zeek</parent>
+  <regex type="pcre2">^(\S+)\t([\d.]+)\t(\S+)\t(\d+\.\d+\.\d+\.\d+)\t(\d+)\t(\d+\.\d+\.\d+\.\d+)\t(\d+)\t(\S+)\t(\S+)\t(\d+|-)\t(\S+)\t([^\t]*)\t([^\t]*)</regex>
+  <order>zeek.node,zeek.ts,zeek.uid,zeek.srcip,zeek.srcport,zeek.dstip,zeek.dstport,zeek.ssh_version,zeek.auth_success,zeek.auth_attempts,zeek.direction,zeek.ssh_client,zeek.ssh_server</order>
+</decoder>
+
+<!-- FILES.LOG - File Activity Decoder -->
+<decoder name="zeek-files">
+  <parent>zeek</parent>
+  <regex type="pcre2">^(\S+)\t([\d.]+)\t(\S+)\t([^\t]+)\t([^\t]+)\t[^\t]+\t(\S+)\t\d+\t[^\t]*\t([^\t]+)\t([^\t]*)</regex>
+  <order>zeek.node,zeek.ts,zeek.fuid,zeek.tx_hosts,zeek.rx_hosts,zeek.source,zeek.mime_type,zeek.filename</order>
+</decoder>
+
+<!-- WEIRD.LOG - Unusual Network Behavior Decoder -->
+<decoder name="zeek-weird">
+  <parent>zeek</parent>
+  <regex type="pcre2">^(\S+)\t([\d.]+)\t(\S+)\t(\d+\.\d+\.\d+\.\d+|-)\t(\d+|-)\t(\d+\.\d+\.\d+\.\d+|-)\t(\d+|-)\t([^\t]+)\t([^\t]*)</regex>
+  <order>zeek.node,zeek.ts,zeek.uid,zeek.srcip,zeek.srcport,zeek.dstip,zeek.dstport,zeek.weird_name,zeek.weird_addl</order>
+</decoder>

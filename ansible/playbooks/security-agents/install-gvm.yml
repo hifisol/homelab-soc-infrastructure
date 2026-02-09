@@ -1,0 +1,144 @@
+---
+- name: Install Greenbone Vulnerability Management (GVM) on Debian 12
+  hosts: threat-hunter
+  become: yes
+  vars:
+    gvm_admin_password: "{{ gvm_admin_password }}"
+
+  tasks:
+    - name: Update apt cache
+      ansible.builtin.apt:
+        update_cache: yes
+      tags: [gvm]
+
+    - name: Install GVM and OpenVAS packages
+      ansible.builtin.apt:
+        name:
+          - gvm
+          - openvas
+          - openvas-scanner
+          - gvmd
+          - greenbone-security-assistant
+          - postgresql
+          - postgresql-contrib
+          - redis-server
+        state: present
+        install_recommends: yes
+      tags: [gvm]
+      ignore_errors: yes
+      register: gvm_install_result
+
+    - name: Check if GVM packages were found
+      ansible.builtin.debug:
+        msg: "GVM packages not in default repos, will use alternative installation"
+      when: gvm_install_result.failed
+      tags: [gvm]
+
+    - name: Install alternative GVM installation dependencies
+      ansible.builtin.apt:
+        name:
+          - python3
+          - python3-pip
+          - git
+          - curl
+          - wget
+          - gnupg
+        state: present
+      when: gvm_install_result.failed
+      tags: [gvm]
+
+    - name: Clone Greenbone installation scripts
+      ansible.builtin.git:
+        repo: 'https://github.com/greenbone/greenbone-community-container.git'
+        dest: /opt/greenbone-community-container
+        version: main
+      when: gvm_install_result.failed
+      tags: [gvm]
+
+    - name: Install Docker for GVM container deployment
+      ansible.builtin.shell: |
+        curl -fsSL https://get.docker.com -o /tmp/get-docker.sh
+        sh /tmp/get-docker.sh
+      args:
+        creates: /usr/bin/docker
+      when: gvm_install_result.failed
+      tags: [gvm, docker]
+
+    - name: Start Docker service
+      ansible.builtin.systemd:
+        name: docker
+        state: started
+        enabled: yes
+      when: gvm_install_result.failed
+      tags: [gvm, docker]
+
+    - name: Deploy GVM using Docker Compose
+      ansible.builtin.shell: |
+        cd /opt/greenbone-community-container
+        docker compose -f docker-compose.yml up -d
+      when: gvm_install_result.failed
+      tags: [gvm, docker]
+      ignore_errors: yes
+      register: docker_deploy
+
+    - name: Create admin user (if native install succeeded)
+      ansible.builtin.shell: |
+        sudo -u _gvm gvmd --create-user=admin --password="{{ gvm_admin_password }}" || \
+        sudo -u _gvm gvmd --user=admin --new-password="{{ gvm_admin_password }}"
+      when: not gvm_install_result.failed
+      ignore_errors: yes
+      tags: [gvm]
+
+    - name: Configure GSA to listen on all interfaces
+      ansible.builtin.file:
+        path: /etc/systemd/system/gsad.service.d
+        state: directory
+        mode: '0755'
+      when: not gvm_install_result.failed
+      tags: [gvm]
+
+    - name: Override GSA listen address
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/gsad.service.d/override.conf
+        content: |
+          [Service]
+          ExecStart=
+          ExecStart=/usr/sbin/gsad --foreground --listen 0.0.0.0 --port 9392
+      when: not gvm_install_result.failed
+      register: gsad_override
+      tags: [gvm]
+
+    - name: Reload systemd and restart GSA
+      ansible.builtin.systemd:
+        daemon_reload: yes
+      when: gsad_override.changed
+      tags: [gvm]
+
+    - name: Start GVM services
+      ansible.builtin.systemd:
+        name: "{{ item }}"
+        state: restarted
+        enabled: yes
+      loop:
+        - greenbone-security-assistant
+        - gvmd
+        - ospd-openvas
+      when: not gvm_install_result.failed
+      ignore_errors: yes
+      tags: [gvm]
+
+    - name: Display installation summary
+      ansible.builtin.debug:
+        msg:
+          - "=========================================="
+          - "GVM Installation Attempt Complete"
+          - "=========================================="
+          - "Web Interface: https://{{ ansible_host }}:9392"
+          - "              http://{{ ansible_host }}:9392"
+          - "Username: admin"
+          - "Password: {{ gvm_admin_password }}"
+          - ""
+          - "Check service status: sudo systemctl status greenbone-security-assistant"
+          - "View logs: sudo journalctl -u greenbone-security-assistant -f"
+          - "=========================================="
+      tags: [gvm]

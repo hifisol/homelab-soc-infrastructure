@@ -1,0 +1,497 @@
+---
+# =============================================================================
+# AD Lab - Deploy Playbook
+# =============================================================================
+# Deploys the red team / pentesting lab on proxmox-host:
+#   1. Creates isolated vmbr2 bridge
+#   2. Clones lab VMs from templates
+#   3. Creates LXC container with ParrotOS tools
+#   4. Post-clone provisioning (Ubuntu AD join)
+#
+# Usage:
+#   ansible-playbook playbooks/ad-lab-deploy.yml                   # Deploy everything
+#   ansible-playbook playbooks/ad-lab-deploy.yml --tags dc         # Single VM
+#   ansible-playbook playbooks/ad-lab-deploy.yml --tags kali       # Single VM
+#   ansible-playbook playbooks/ad-lab-deploy.yml --tags parrot-lxc # LXC only
+# =============================================================================
+
+# =============================================================================
+# PLAY 1: Configure Proxmox Host (SSH to PM-1)
+# =============================================================================
+- name: Configure Proxmox Host for Lab Network
+  hosts: proxmox-host
+  become: yes
+  gather_facts: no
+  vars_files:
+    - ../vars/vault.yml
+    - ../vars/ad-lab.yml
+
+  tasks:
+    # --- Create Isolated Bridge ---
+    - name: Check if vmbr2 already exists
+      ansible.builtin.shell: "ip link show {{ lab_bridge }}"
+      register: bridge_check
+      failed_when: false
+      changed_when: false
+      tags: [network]
+
+    - name: Add vmbr2 to /etc/network/interfaces
+      ansible.builtin.blockinfile:
+        path: /etc/network/interfaces
+        marker: "# {mark} ANSIBLE MANAGED - AD LAB BRIDGE"
+        block: |
+          auto {{ lab_bridge }}
+          iface {{ lab_bridge }} inet static
+              address {{ lab_gateway }}
+              netmask {{ lab_netmask }}
+              bridge-ports none
+              bridge-stp off
+              bridge-fd 0
+      when: bridge_check.rc != 0
+      tags: [network]
+
+    - name: Activate vmbr2
+      ansible.builtin.shell: "ifreload -a"
+      when: bridge_check.rc != 0
+      tags: [network]
+
+    - name: Verify vmbr2 is up
+      ansible.builtin.shell: "ip addr show {{ lab_bridge }}"
+      register: bridge_status
+      changed_when: false
+      tags: [network]
+
+    - name: Bridge status
+      ansible.builtin.debug:
+        msg: "{{ bridge_status.stdout_lines }}"
+      tags: [network]
+
+    # --- Download VirtIO Drivers ISO ---
+    - name: Check if VirtIO drivers ISO exists
+      ansible.builtin.stat:
+        path: "{{ iso_path }}/{{ virtio_iso }}"
+      register: virtio_check
+      tags: [iso]
+
+    - name: Download VirtIO drivers ISO
+      ansible.builtin.get_url:
+        url: "{{ virtio_iso_url }}"
+        dest: "{{ iso_path }}/{{ virtio_iso }}"
+        mode: "0644"
+      when: not virtio_check.stat.exists
+      tags: [iso]
+
+    # --- Download LXC Template ---
+    - name: Check if Debian 12 LXC template exists
+      ansible.builtin.shell: "pveam list local | grep -q '{{ lab_lxc.parrot_lxc_01.template }}'"
+      register: lxc_tmpl_check
+      failed_when: false
+      changed_when: false
+      tags: [lxc-template, parrot-lxc]
+
+    - name: Download Debian 12 LXC template
+      ansible.builtin.shell: "pveam download local {{ lab_lxc.parrot_lxc_01.template }}"
+      when: lxc_tmpl_check.rc != 0
+      tags: [lxc-template, parrot-lxc]
+
+# =============================================================================
+# PLAY 2: Clone Lab VMs (SSH to PM-1, using qm commands)
+# =============================================================================
+- name: Clone Lab VMs from Templates
+  hosts: proxmox-host
+  become: yes
+  gather_facts: no
+  vars_files:
+    - ../vars/vault.yml
+    - ../vars/ad-lab.yml
+
+  tasks:
+    # --- AD-DC-01 (VMID 200) ---
+    - name: Check if AD-DC-01 already exists
+      ansible.builtin.shell: "qm status {{ lab_vms.ad_dc_01.vmid }}"
+      register: dc_check
+      failed_when: false
+      changed_when: false
+      tags: [dc]
+
+    - name: Clone AD-DC-01 from WinServer 2022 template
+      ansible.builtin.shell: >
+        qm clone {{ lab_vms.ad_dc_01.template_vmid }} {{ lab_vms.ad_dc_01.vmid }}
+        --name {{ lab_vms.ad_dc_01.name }}
+        --full 1
+        --storage {{ vm_storage }}
+      when: dc_check.rc != 0
+      tags: [dc]
+
+    - name: Configure AD-DC-01 resources and network
+      ansible.builtin.shell: >
+        qm set {{ lab_vms.ad_dc_01.vmid }}
+        --memory {{ lab_vms.ad_dc_01.memory }}
+        --cores {{ lab_vms.ad_dc_01.cores }}
+        --net0 virtio,bridge={{ lab_bridge }}
+        --onboot 0
+      when: dc_check.rc != 0
+      tags: [dc]
+
+    - name: AD-DC-01 cloned
+      ansible.builtin.debug:
+        msg: "AD-DC-01 (VMID {{ lab_vms.ad_dc_01.vmid }}) on {{ lab_bridge }} — set static IP {{ lab_vms.ad_dc_01.ip }}"
+      tags: [dc]
+
+    # --- KALI-01 (VMID 201) ---
+    - name: Check if KALI-01 already exists
+      ansible.builtin.shell: "qm status {{ lab_vms.kali_01.vmid }}"
+      register: kali_check
+      failed_when: false
+      changed_when: false
+      tags: [kali]
+
+    - name: Clone KALI-01 from Kali template
+      ansible.builtin.shell: >
+        qm clone {{ lab_vms.kali_01.template_vmid }} {{ lab_vms.kali_01.vmid }}
+        --name {{ lab_vms.kali_01.name }}
+        --full 1
+        --storage {{ vm_storage }}
+      when: kali_check.rc != 0
+      tags: [kali]
+
+    - name: Configure KALI-01 resources and network
+      ansible.builtin.shell: >
+        qm set {{ lab_vms.kali_01.vmid }}
+        --memory {{ lab_vms.kali_01.memory }}
+        --cores {{ lab_vms.kali_01.cores }}
+        --net0 virtio,bridge={{ lab_bridge }}
+        --onboot 0
+      when: kali_check.rc != 0
+      tags: [kali]
+
+    - name: KALI-01 cloned
+      ansible.builtin.debug:
+        msg: "KALI-01 (VMID {{ lab_vms.kali_01.vmid }}) on {{ lab_bridge }} — set static IP {{ lab_vms.kali_01.ip }}"
+      tags: [kali]
+
+    # --- COMMANDO-01 (VMID 202) ---
+    - name: Check if COMMANDO-01 already exists
+      ansible.builtin.shell: "qm status {{ lab_vms.commando_01.vmid }}"
+      register: commando_check
+      failed_when: false
+      changed_when: false
+      tags: [commando]
+
+    - name: Clone COMMANDO-01 from Win10 LTSC template
+      ansible.builtin.shell: >
+        qm clone {{ lab_vms.commando_01.template_vmid }} {{ lab_vms.commando_01.vmid }}
+        --name {{ lab_vms.commando_01.name }}
+        --full 1
+        --storage {{ vm_storage }}
+      when: commando_check.rc != 0
+      tags: [commando]
+
+    - name: Configure COMMANDO-01 resources and network
+      ansible.builtin.shell: >
+        qm set {{ lab_vms.commando_01.vmid }}
+        --memory {{ lab_vms.commando_01.memory }}
+        --cores {{ lab_vms.commando_01.cores }}
+        --net0 virtio,bridge={{ lab_bridge }}
+        --onboot 0
+      when: commando_check.rc != 0
+      tags: [commando]
+
+    - name: COMMANDO-01 cloned
+      ansible.builtin.debug:
+        msg: "COMMANDO-01 (VMID {{ lab_vms.commando_01.vmid }}) on {{ lab_bridge }} — set static IP {{ lab_vms.commando_01.ip }}"
+      tags: [commando]
+
+    # --- PARROT-01 (VMID 203) ---
+    - name: Check if PARROT-01 already exists
+      ansible.builtin.shell: "qm status {{ lab_vms.parrot_01.vmid }}"
+      register: parrot_check
+      failed_when: false
+      changed_when: false
+      tags: [parrot]
+
+    - name: Clone PARROT-01 from ParrotOS template
+      ansible.builtin.shell: >
+        qm clone {{ lab_vms.parrot_01.template_vmid }} {{ lab_vms.parrot_01.vmid }}
+        --name {{ lab_vms.parrot_01.name }}
+        --full 1
+        --storage {{ vm_storage }}
+      when: parrot_check.rc != 0
+      tags: [parrot]
+
+    - name: Configure PARROT-01 resources and network
+      ansible.builtin.shell: >
+        qm set {{ lab_vms.parrot_01.vmid }}
+        --memory {{ lab_vms.parrot_01.memory }}
+        --cores {{ lab_vms.parrot_01.cores }}
+        --net0 virtio,bridge={{ lab_bridge }}
+        --onboot 0
+      when: parrot_check.rc != 0
+      tags: [parrot]
+
+    - name: PARROT-01 cloned
+      ansible.builtin.debug:
+        msg: "PARROT-01 (VMID {{ lab_vms.parrot_01.vmid }}) on {{ lab_bridge }} — set static IP {{ lab_vms.parrot_01.ip }}"
+      tags: [parrot]
+
+    # --- UBUNTU-AD-01 (VMID 204) — Cloud-Init VM ---
+    - name: Check if UBUNTU-AD-01 already exists
+      ansible.builtin.shell: "qm status {{ lab_vms.ubuntu_ad_01.vmid }}"
+      register: ubuntu_ad_check
+      failed_when: false
+      changed_when: false
+      tags: [ubuntu-ad]
+
+    - name: Clone UBUNTU-AD-01 from Ubuntu 24.04 template
+      ansible.builtin.shell: >
+        qm clone {{ lab_vms.ubuntu_ad_01.template_vmid }} {{ lab_vms.ubuntu_ad_01.vmid }}
+        --name {{ lab_vms.ubuntu_ad_01.name }}
+        --full 1
+        --storage {{ vm_storage }}
+      when: ubuntu_ad_check.rc != 0
+      tags: [ubuntu-ad]
+
+    - name: Configure UBUNTU-AD-01 resources, network, and cloud-init
+      ansible.builtin.shell: >
+        qm set {{ lab_vms.ubuntu_ad_01.vmid }}
+        --memory {{ lab_vms.ubuntu_ad_01.memory }}
+        --cores {{ lab_vms.ubuntu_ad_01.cores }}
+        --net0 virtio,bridge={{ lab_bridge }}
+        --ipconfig0 ip={{ lab_vms.ubuntu_ad_01.ip }}/{{ lab_cidr }},gw={{ lab_gateway }}
+        --nameserver {{ lab_dns }}
+        --searchdomain {{ ad_domain }}
+        --onboot 0
+      when: ubuntu_ad_check.rc != 0
+      tags: [ubuntu-ad]
+
+    - name: UBUNTU-AD-01 cloned with cloud-init
+      ansible.builtin.debug:
+        msg: "UBUNTU-AD-01 (VMID {{ lab_vms.ubuntu_ad_01.vmid }}) on {{ lab_bridge }} — IP {{ lab_vms.ubuntu_ad_01.ip }} via cloud-init"
+      tags: [ubuntu-ad]
+
+    # --- DRAGONOS-01 (VMID 205) ---
+    - name: Check if DRAGONOS-01 already exists
+      ansible.builtin.shell: "qm status {{ lab_vms.dragonos_01.vmid }}"
+      register: dragonos_check
+      failed_when: false
+      changed_when: false
+      tags: [dragonos]
+
+    - name: Clone DRAGONOS-01 from DragonOS template
+      ansible.builtin.shell: >
+        qm clone {{ lab_vms.dragonos_01.template_vmid }} {{ lab_vms.dragonos_01.vmid }}
+        --name {{ lab_vms.dragonos_01.name }}
+        --full 1
+        --storage {{ vm_storage }}
+      when: dragonos_check.rc != 0
+      tags: [dragonos]
+
+    - name: Configure DRAGONOS-01 resources and network
+      ansible.builtin.shell: >
+        qm set {{ lab_vms.dragonos_01.vmid }}
+        --memory {{ lab_vms.dragonos_01.memory }}
+        --cores {{ lab_vms.dragonos_01.cores }}
+        --net0 virtio,bridge={{ lab_bridge }}
+        --onboot 0
+      when: dragonos_check.rc != 0
+      tags: [dragonos]
+
+    - name: DRAGONOS-01 cloned
+      ansible.builtin.debug:
+        msg: "DRAGONOS-01 (VMID {{ lab_vms.dragonos_01.vmid }}) on {{ lab_bridge }} — set static IP {{ lab_vms.dragonos_01.ip }}"
+      tags: [dragonos]
+
+    # --- BLACKARCH-01 (VMID 206) ---
+    - name: Check if BLACKARCH-01 already exists
+      ansible.builtin.shell: "qm status {{ lab_vms.blackarch_01.vmid }}"
+      register: blackarch_check
+      failed_when: false
+      changed_when: false
+      tags: [blackarch]
+
+    - name: Clone BLACKARCH-01 from BlackArch template
+      ansible.builtin.shell: >
+        qm clone {{ lab_vms.blackarch_01.template_vmid }} {{ lab_vms.blackarch_01.vmid }}
+        --name {{ lab_vms.blackarch_01.name }}
+        --full 1
+        --storage {{ vm_storage }}
+      when: blackarch_check.rc != 0
+      tags: [blackarch]
+
+    - name: Configure BLACKARCH-01 resources and network
+      ansible.builtin.shell: >
+        qm set {{ lab_vms.blackarch_01.vmid }}
+        --memory {{ lab_vms.blackarch_01.memory }}
+        --cores {{ lab_vms.blackarch_01.cores }}
+        --net0 virtio,bridge={{ lab_bridge }}
+        --onboot 0
+      when: blackarch_check.rc != 0
+      tags: [blackarch]
+
+    - name: BLACKARCH-01 cloned
+      ansible.builtin.debug:
+        msg: "BLACKARCH-01 (VMID {{ lab_vms.blackarch_01.vmid }}) on {{ lab_bridge }} — set static IP {{ lab_vms.blackarch_01.ip }}"
+      tags: [blackarch]
+
+    # --- SECONION-01 (VMID 207) ---
+    - name: Check if SECONION-01 already exists
+      ansible.builtin.shell: "qm status {{ lab_vms.seconion_01.vmid }}"
+      register: seconion_check
+      failed_when: false
+      changed_when: false
+      tags: [seconion]
+
+    - name: Clone SECONION-01 from Security Onion template
+      ansible.builtin.shell: >
+        qm clone {{ lab_vms.seconion_01.template_vmid }} {{ lab_vms.seconion_01.vmid }}
+        --name {{ lab_vms.seconion_01.name }}
+        --full 1
+        --storage {{ vm_storage }}
+      when: seconion_check.rc != 0
+      tags: [seconion]
+
+    - name: Configure SECONION-01 resources and network
+      ansible.builtin.shell: >
+        qm set {{ lab_vms.seconion_01.vmid }}
+        --memory {{ lab_vms.seconion_01.memory }}
+        --cores {{ lab_vms.seconion_01.cores }}
+        --net0 virtio,bridge={{ lab_bridge }}
+        --onboot 0
+      when: seconion_check.rc != 0
+      tags: [seconion]
+
+    - name: SECONION-01 cloned
+      ansible.builtin.debug:
+        msg: "SECONION-01 (VMID {{ lab_vms.seconion_01.vmid }}) on {{ lab_bridge }} — set static IP {{ lab_vms.seconion_01.ip }}"
+      tags: [seconion]
+
+# =============================================================================
+# PLAY 3: Create LXC Container
+# =============================================================================
+- name: Create ParrotOS LXC Container
+  hosts: proxmox-host
+  become: yes
+  gather_facts: no
+  vars_files:
+    - ../vars/vault.yml
+    - ../vars/ad-lab.yml
+
+  tasks:
+    - name: Check if ParrotOS LXC already exists
+      ansible.builtin.shell: "pct status {{ lab_lxc.parrot_lxc_01.ctid }}"
+      register: lxc_check
+      failed_when: false
+      changed_when: false
+      tags: [parrot-lxc]
+
+    - name: Create Debian 12 LXC container
+      ansible.builtin.shell: |
+        pct create {{ lab_lxc.parrot_lxc_01.ctid }} \
+          local:vztmpl/{{ lab_lxc.parrot_lxc_01.template }} \
+          --hostname {{ lab_lxc.parrot_lxc_01.hostname }} \
+          --memory {{ lab_lxc.parrot_lxc_01.memory }} \
+          --swap {{ lab_lxc.parrot_lxc_01.swap }} \
+          --cores {{ lab_lxc.parrot_lxc_01.cores }} \
+          --rootfs {{ vm_storage }}:{{ lab_lxc.parrot_lxc_01.rootfs_size }} \
+          --net0 name=eth0,bridge={{ lab_bridge }},ip={{ lab_lxc.parrot_lxc_01.ip }}/{{ lab_cidr }},gw={{ lab_gateway }},firewall=0 \
+          --nameserver {{ lab_dns }} \
+          --searchdomain {{ ad_domain }} \
+          --unprivileged {{ lab_lxc.parrot_lxc_01.unprivileged | ternary('1','0') }} \
+          --features nesting={{ lab_lxc.parrot_lxc_01.nesting | ternary('1','0') }} \
+          --onboot 0 \
+          --start 0
+      when: lxc_check.rc != 0
+      tags: [parrot-lxc]
+
+    - name: Start ParrotOS LXC container
+      ansible.builtin.shell: "pct start {{ lab_lxc.parrot_lxc_01.ctid }}"
+      when: lxc_check.rc != 0
+      tags: [parrot-lxc]
+
+    - name: Wait for LXC container to boot
+      ansible.builtin.pause:
+        seconds: 10
+      when: lxc_check.rc != 0
+      tags: [parrot-lxc]
+
+    - name: Add ParrotOS apt repository
+      ansible.builtin.shell: |
+        pct exec {{ lab_lxc.parrot_lxc_01.ctid }} -- bash -c '
+          apt-get update -y &&
+          apt-get install -y curl gnupg &&
+          curl -fsSL https://deb.parrot.sh/misc/parrot-archive-keyring.gpg -o /usr/share/keyrings/parrot-archive-keyring.gpg &&
+          echo "deb [signed-by=/usr/share/keyrings/parrot-archive-keyring.gpg] https://deb.parrot.sh/parrot lory main" > /etc/apt/sources.list.d/parrot.list &&
+          apt-get update -y
+        '
+      when: lxc_check.rc != 0
+      tags: [parrot-lxc]
+
+    - name: Install ParrotOS common tools in LXC
+      ansible.builtin.shell: |
+        pct exec {{ lab_lxc.parrot_lxc_01.ctid }} -- bash -c '
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            parrot-tools-common 2>/dev/null || \
+          echo "ParrotOS tools install attempted - check repo availability"
+        '
+      when: lxc_check.rc != 0
+      tags: [parrot-lxc]
+
+    - name: ParrotOS LXC container created
+      ansible.builtin.debug:
+        msg: "CTID {{ lab_lxc.parrot_lxc_01.ctid }} ({{ lab_lxc.parrot_lxc_01.hostname }}) on {{ lab_bridge }} — IP {{ lab_lxc.parrot_lxc_01.ip }}"
+      tags: [parrot-lxc]
+
+# =============================================================================
+# PLAY 4: Post-Clone Provisioning (SSH to running VMs)
+# =============================================================================
+- name: Post-Clone Provisioning - Ubuntu AD Join
+  hosts: proxmox-host
+  become: yes
+  gather_facts: no
+  vars_files:
+    - ../vars/vault.yml
+    - ../vars/ad-lab.yml
+
+  tasks:
+    - name: Check if UBUNTU-AD-01 is running
+      ansible.builtin.shell: "qm status {{ lab_vms.ubuntu_ad_01.vmid }} --verbose"
+      register: ubuntu_ad_status
+      failed_when: false
+      changed_when: false
+      tags: [ubuntu-ad-join]
+
+    - name: Provision Ubuntu AD join instructions
+      ansible.builtin.debug:
+        msg:
+          - "=== UBUNTU-AD-01 Post-Clone AD Join ==="
+          - "1. Start AD-DC-01 (VMID {{ lab_vms.ad_dc_01.vmid }}) and complete domain setup first"
+          - "2. Start UBUNTU-AD-01 (VMID {{ lab_vms.ubuntu_ad_01.vmid }})"
+          - "3. SSH to {{ lab_vms.ubuntu_ad_01.ip }} as {{ cloudinit_user }}"
+          - "4. Run the following commands:"
+          - "   sudo apt update && sudo apt install -y realmd sssd sssd-tools adcli krb5-user samba-common-bin"
+          - "   sudo realm discover {{ lab_vms.ad_dc_01.ip }}"
+          - "   sudo realm join --user={{ ad_admin_user }} {{ ad_domain }}"
+          - "   sudo pam-auth-update --enable mkhomedir"
+          - "5. Verify: id {{ ad_admin_user }}@{{ ad_domain }}"
+      tags: [ubuntu-ad-join]
+
+    # --- Deployment Summary ---
+    - name: Show lab deployment summary
+      ansible.builtin.debug:
+        msg:
+          - "=== AD Lab Deployment Summary ==="
+          - "Bridge: {{ lab_bridge }} ({{ lab_subnet }})"
+          - ""
+          - "VMs:"
+          - "  {{ lab_vms.ad_dc_01.name }} (VMID {{ lab_vms.ad_dc_01.vmid }}) — {{ lab_vms.ad_dc_01.ip }}"
+          - "  {{ lab_vms.kali_01.name }} (VMID {{ lab_vms.kali_01.vmid }}) — {{ lab_vms.kali_01.ip }}"
+          - "  {{ lab_vms.commando_01.name }} (VMID {{ lab_vms.commando_01.vmid }}) — {{ lab_vms.commando_01.ip }}"
+          - "  {{ lab_vms.parrot_01.name }} (VMID {{ lab_vms.parrot_01.vmid }}) — {{ lab_vms.parrot_01.ip }}"
+          - "  {{ lab_vms.ubuntu_ad_01.name }} (VMID {{ lab_vms.ubuntu_ad_01.vmid }}) — {{ lab_vms.ubuntu_ad_01.ip }}"
+          - "  {{ lab_vms.dragonos_01.name }} (VMID {{ lab_vms.dragonos_01.vmid }}) — {{ lab_vms.dragonos_01.ip }}"
+          - "  {{ lab_vms.blackarch_01.name }} (VMID {{ lab_vms.blackarch_01.vmid }}) — {{ lab_vms.blackarch_01.ip }}"
+          - "  {{ lab_vms.seconion_01.name }} (VMID {{ lab_vms.seconion_01.vmid }}) — {{ lab_vms.seconion_01.ip }}"
+          - ""
+          - "LXC:"
+          - "  {{ lab_lxc.parrot_lxc_01.hostname }} (CTID {{ lab_lxc.parrot_lxc_01.ctid }}) — {{ lab_lxc.parrot_lxc_01.ip }}"
+      tags: [always]

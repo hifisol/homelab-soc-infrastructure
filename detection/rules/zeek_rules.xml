@@ -1,0 +1,377 @@
+<!--
+  Zeek Network Security Monitor - Wazuh Rules
+  Location: /var/ossec/etc/rules/zeek_rules.xml
+  Rule ID Range: 100300-100499 (Zeek-specific)
+  
+  Uses field-based detection instead of decoded_as for log type identification.
+-->
+
+<group name="zeek,network,">
+
+  <!-- BASE ZEEK EVENT DETECTION -->
+  <rule id="100300" level="0">
+    <decoded_as>zeek</decoded_as>
+    <description>Zeek network event detected</description>
+  </rule>
+
+  <!-- Log type classification using field presence -->
+  <rule id="100301" level="3">
+    <if_sid>100300</if_sid>
+    <field name="zeek.conn_state">\.+</field>
+    <description>Zeek: Network connection logged</description>
+  </rule>
+
+  <rule id="100302" level="3">
+    <if_sid>100300</if_sid>
+    <field name="zeek.query">\.+</field>
+    <description>Zeek: DNS query logged</description>
+  </rule>
+
+  <rule id="100303" level="3">
+    <if_sid>100300</if_sid>
+    <field name="zeek.uri">\.+</field>
+    <description>Zeek: HTTP transaction logged</description>
+  </rule>
+
+  <rule id="100304" level="3">
+    <if_sid>100300</if_sid>
+    <field name="zeek.ssl_version">\.+</field>
+    <description>Zeek: SSL/TLS session logged</description>
+  </rule>
+
+  <rule id="100305" level="5">
+    <if_sid>100300</if_sid>
+    <field name="zeek.notice_type">\.+</field>
+    <description>Zeek: Security notice generated</description>
+  </rule>
+
+  <rule id="100306" level="3">
+    <if_sid>100300</if_sid>
+    <field name="zeek.ssh_version">\.+</field>
+    <description>Zeek: SSH connection logged</description>
+  </rule>
+
+  <rule id="100307" level="3">
+    <if_sid>100300</if_sid>
+    <field name="zeek.mime_type">\.+</field>
+    <description>Zeek: File activity logged</description>
+  </rule>
+
+  <rule id="100308" level="5">
+    <if_sid>100300</if_sid>
+    <field name="zeek.weird_name">\.+</field>
+    <description>Zeek: Unusual network behavior detected</description>
+  </rule>
+
+  <!-- CONNECTION ANOMALY RULES (100310-100329) -->
+  
+  <rule id="100310" level="7">
+    <if_sid>100301</if_sid>
+    <field name="zeek.duration" type="pcre2">^[0-9]{4,}</field>
+    <description>Zeek: Very long connection detected ($(zeek.duration)s) - $(zeek.srcip) -> $(zeek.dstip):$(zeek.dstport)</description>
+    <group>connection_anomaly,</group>
+  </rule>
+
+  <!-- Suspicious ports - Metasploit default -->
+  <rule id="100311" level="10">
+    <if_sid>100301</if_sid>
+    <field name="zeek.dstport" type="pcre2">^(4444|5555|6666|7777|8888)$</field>
+    <description>Zeek: Connection to suspicious port $(zeek.dstport) - $(zeek.srcip) -> $(zeek.dstip)</description>
+    <group>suspicious_port,</group>
+  </rule>
+
+  <!-- Suspicious ports - Hacker ports -->
+  <rule id="100312" level="10">
+    <if_sid>100301</if_sid>
+    <field name="zeek.dstport" type="pcre2">^(31337|12345|54321)$</field>
+    <description>Zeek: Connection to suspicious hacker port $(zeek.dstport) - $(zeek.srcip) -> $(zeek.dstip)</description>
+    <group>suspicious_port,</group>
+  </rule>
+
+  <!-- IRC traffic (potential botnet) -->
+  <rule id="100313" level="10">
+    <if_sid>100301</if_sid>
+    <field name="zeek.dstport" type="pcre2">^(6667|6668|6669|6697)$</field>
+    <description>Zeek: IRC traffic detected - potential botnet - $(zeek.srcip) -> $(zeek.dstip):$(zeek.dstport)</description>
+    <group>irc,botnet,</group>
+  </rule>
+
+  <!-- Tor ports -->
+  <rule id="100314" level="12">
+    <if_sid>100301</if_sid>
+    <field name="zeek.dstport" type="pcre2">^(9001|9030|9050|9051|9150)$</field>
+    <description>Zeek: Potential Tor traffic - $(zeek.srcip) -> $(zeek.dstip):$(zeek.dstport)</description>
+    <group>tor,anonymization,</group>
+  </rule>
+
+  <!-- Large data transfer (>100MB) -->
+  <rule id="100315" level="8">
+    <if_sid>100301</if_sid>
+    <field name="zeek.orig_bytes" type="pcre2">^[0-9]{9,}</field>
+    <description>Zeek: Large outbound data transfer ($(zeek.orig_bytes) bytes) - $(zeek.srcip) -> $(zeek.dstip)</description>
+    <group>data_exfiltration,</group>
+  </rule>
+
+  <!-- DNS ANOMALY RULES (100330-100349) -->
+
+  <rule id="100330" level="3">
+    <if_sid>100302</if_sid>
+    <field name="zeek.rcode_name">NXDOMAIN</field>
+    <description>Zeek: DNS NXDOMAIN for $(zeek.query) from $(zeek.srcip)</description>
+    <group>dns_failure,</group>
+  </rule>
+
+  <rule id="100331" level="10" frequency="10" timeframe="60">
+    <if_matched_sid>100330</if_matched_sid>
+    <same_field>zeek.srcip</same_field>
+    <description>Zeek: Multiple DNS failures - possible DGA malware</description>
+    <group>dga,malware,</group>
+  </rule>
+
+  <rule id="100332" level="5">
+    <if_sid>100302</if_sid>
+    <field name="zeek.qtype_name">TXT</field>
+    <description>Zeek: DNS TXT query for $(zeek.query) from $(zeek.srcip)</description>
+    <group>dns_tunneling,</group>
+  </rule>
+
+  <rule id="100333" level="12" frequency="20" timeframe="120">
+    <if_matched_sid>100332</if_matched_sid>
+    <same_field>zeek.srcip</same_field>
+    <description>Zeek: High volume DNS TXT queries - likely DNS tunneling</description>
+    <group>dns_tunneling,data_exfiltration,</group>
+  </rule>
+
+  <rule id="100334" level="7">
+    <if_sid>100302</if_sid>
+    <field name="zeek.query" type="pcre2">^.{60,}</field>
+    <description>Zeek: Unusually long DNS query - $(zeek.query)</description>
+    <group>dns_tunneling,</group>
+  </rule>
+
+  <!-- HTTP ANOMALY RULES (100350-100369) -->
+
+  <rule id="100350" level="10">
+    <if_sid>100303</if_sid>
+    <field name="zeek.user_agent" type="pcre2">(?i)(curl|wget|python|powershell|certutil|bitsadmin|mshta)</field>
+    <description>Zeek: Suspicious HTTP User-Agent: $(zeek.user_agent) - $(zeek.srcip) -> $(zeek.host)</description>
+    <group>suspicious_user_agent,</group>
+  </rule>
+
+  <rule id="100351" level="7">
+    <if_sid>100303</if_sid>
+    <field name="zeek.user_agent">^-$</field>
+    <description>Zeek: HTTP request with empty User-Agent - $(zeek.srcip) -> $(zeek.host)$(zeek.uri)</description>
+    <group>suspicious_user_agent,</group>
+  </rule>
+
+  <rule id="100352" level="10">
+    <if_sid>100303</if_sid>
+    <field name="zeek.uri" type="pcre2">(?i)\.(exe|dll|scr|bat|ps1|vbs|js|hta|msi)(\?|$)</field>
+    <description>Zeek: Executable file download - $(zeek.srcip) downloading $(zeek.uri) from $(zeek.host)</description>
+    <group>malware_download,</group>
+  </rule>
+
+  <rule id="100353" level="8">
+    <if_sid>100303</if_sid>
+    <field name="zeek.method">POST</field>
+    <field name="zeek.host" type="pcre2">^\d+\.\d+\.\d+\.\d+$</field>
+    <description>Zeek: HTTP POST to raw IP - $(zeek.srcip) -> $(zeek.host)$(zeek.uri)</description>
+    <group>suspicious_http,</group>
+  </rule>
+
+  <rule id="100354" level="3">
+    <if_sid>100303</if_sid>
+    <field name="zeek.status_code" type="pcre2">^[45]\d\d$</field>
+    <description>Zeek: HTTP error $(zeek.status_code) - $(zeek.srcip) -> $(zeek.host)$(zeek.uri)</description>
+    <group>http_error,</group>
+  </rule>
+
+  <rule id="100355" level="10" frequency="15" timeframe="60">
+    <if_matched_sid>100354</if_matched_sid>
+    <same_field>zeek.srcip</same_field>
+    <description>Zeek: Web scanning detected - multiple HTTP errors</description>
+    <group>web_scan,reconnaissance,</group>
+  </rule>
+
+  <!-- SSL/TLS ANOMALY RULES (100370-100389) -->
+
+  <rule id="100370" level="7">
+    <if_sid>100304</if_sid>
+    <field name="zeek.validation_status" type="pcre2">^(?!ok$|^-$)</field>
+    <description>Zeek: SSL cert validation failed ($(zeek.validation_status)) - $(zeek.srcip) -> $(zeek.dstip):$(zeek.dstport)</description>
+    <group>ssl_error,</group>
+  </rule>
+
+  <rule id="100371" level="8">
+    <if_sid>100304</if_sid>
+    <field name="zeek.validation_status">self signed</field>
+    <description>Zeek: Self-signed SSL certificate - $(zeek.srcip) -> $(zeek.dstip) ($(zeek.server_name))</description>
+    <group>ssl_error,suspicious_cert,</group>
+  </rule>
+
+  <rule id="100372" level="6">
+    <if_sid>100304</if_sid>
+    <field name="zeek.validation_status" type="pcre2">expired</field>
+    <description>Zeek: Expired SSL certificate - $(zeek.srcip) -> $(zeek.dstip) ($(zeek.server_name))</description>
+    <group>ssl_error,</group>
+  </rule>
+
+  <rule id="100373" level="7">
+    <if_sid>100304</if_sid>
+    <field name="zeek.ssl_version" type="pcre2">^(SSLv|TLSv1$|TLSv10)</field>
+    <description>Zeek: Weak SSL/TLS version ($(zeek.ssl_version)) - $(zeek.srcip) -> $(zeek.dstip)</description>
+    <group>weak_crypto,</group>
+  </rule>
+
+  <rule id="100374" level="5">
+    <if_sid>100304</if_sid>
+    <field name="zeek.dstport" type="pcre2">^(?!(443|8443|993|995|465|636)$)\d+$</field>
+    <description>Zeek: SSL/TLS on non-standard port $(zeek.dstport) - $(zeek.srcip) -> $(zeek.dstip)</description>
+    <group>suspicious_ssl,</group>
+  </rule>
+
+  <!-- SECURITY NOTICE RULES (100390-100409) -->
+
+  <rule id="100390" level="10">
+    <if_sid>100305</if_sid>
+    <field name="zeek.notice_type" type="pcre2">SSL::</field>
+    <description>Zeek Notice: $(zeek.notice_type) - $(zeek.notice_msg)</description>
+    <group>ssl_notice,</group>
+  </rule>
+
+  <rule id="100391" level="12">
+    <if_sid>100305</if_sid>
+    <field name="zeek.notice_type" type="pcre2">Scan::</field>
+    <description>Zeek Notice: $(zeek.notice_type) - $(zeek.notice_msg) from $(zeek.srcip)</description>
+    <group>scan_detected,</group>
+  </rule>
+
+  <rule id="100392" level="10">
+    <if_sid>100305</if_sid>
+    <field name="zeek.notice_type" type="pcre2">Vuln::|Software::</field>
+    <description>Zeek Notice: $(zeek.notice_type) - $(zeek.notice_msg)</description>
+    <group>vulnerability,</group>
+  </rule>
+
+  <rule id="100393" level="7">
+    <if_sid>100305</if_sid>
+    <field name="zeek.notice_type">Traceroute::Detected</field>
+    <description>Zeek Notice: Traceroute detected from $(zeek.srcip)</description>
+    <group>reconnaissance,</group>
+  </rule>
+
+  <rule id="100394" level="8">
+    <if_sid>100305</if_sid>
+    <field name="zeek.notice_type" type="pcre2">Weird::</field>
+    <description>Zeek Notice: Unusual network behavior - $(zeek.notice_msg)</description>
+    <group>anomaly,</group>
+  </rule>
+
+  <rule id="100395" level="10">
+    <if_sid>100305</if_sid>
+    <field name="zeek.notice_type" type="pcre2">(Attack|Exploit|Malware|Intel)::</field>
+    <description>Zeek Notice [HIGH]: $(zeek.notice_type) - $(zeek.notice_msg)</description>
+    <group>attack,</group>
+  </rule>
+
+  <!-- SSH ANOMALY RULES (100410-100429) -->
+
+  <rule id="100410" level="5">
+    <if_sid>100306</if_sid>
+    <field name="zeek.auth_success">F</field>
+    <description>Zeek: SSH authentication failure - $(zeek.srcip) -> $(zeek.dstip):$(zeek.dstport)</description>
+    <group>ssh_failure,</group>
+  </rule>
+
+  <rule id="100411" level="10" frequency="5" timeframe="120">
+    <if_matched_sid>100410</if_matched_sid>
+    <same_field>zeek.srcip</same_field>
+    <description>Zeek: SSH brute force attack detected</description>
+    <group>ssh_brute_force,</group>
+  </rule>
+
+  <rule id="100412" level="10">
+    <if_sid>100306</if_sid>
+    <field name="zeek.auth_attempts" type="pcre2">^([5-9]|[1-9]\d+)$</field>
+    <description>Zeek: SSH session with $(zeek.auth_attempts) auth attempts - $(zeek.srcip) -> $(zeek.dstip)</description>
+    <group>ssh_brute_force,</group>
+  </rule>
+
+  <rule id="100413" level="12">
+    <if_sid>100306</if_sid>
+    <field name="zeek.auth_success">T</field>
+    <field name="zeek.auth_attempts" type="pcre2">^([3-9]|[1-9]\d+)$</field>
+    <description>Zeek: SSH success after $(zeek.auth_attempts) attempts - possible compromise - $(zeek.srcip) -> $(zeek.dstip)</description>
+    <group>ssh_compromise,</group>
+  </rule>
+
+  <!-- FILE ACTIVITY RULES (100430-100449) -->
+
+  <rule id="100430" level="8">
+    <if_sid>100307</if_sid>
+    <field name="zeek.mime_type" type="pcre2">application/(x-dosexec|x-executable|x-msdos-program|octet-stream)</field>
+    <description>Zeek: Executable file transfer - $(zeek.mime_type) - $(zeek.filename)</description>
+    <group>executable_transfer,</group>
+  </rule>
+
+  <rule id="100431" level="7">
+    <if_sid>100307</if_sid>
+    <field name="zeek.mime_type" type="pcre2">(javascript|vbscript|x-python|x-perl|x-sh)</field>
+    <description>Zeek: Script file transfer - $(zeek.mime_type) - $(zeek.filename)</description>
+    <group>script_transfer,</group>
+  </rule>
+
+  <rule id="100432" level="5">
+    <if_sid>100307</if_sid>
+    <field name="zeek.mime_type" type="pcre2">(zip|x-rar|x-7z|x-tar|x-gzip)</field>
+    <description>Zeek: Archive file transfer - $(zeek.mime_type) - $(zeek.filename)</description>
+    <group>archive_transfer,</group>
+  </rule>
+
+  <!-- WEIRD BEHAVIOR RULES (100450-100469) -->
+
+  <rule id="100450" level="7">
+    <if_sid>100308</if_sid>
+    <field name="zeek.weird_name" type="pcre2">^dns_</field>
+    <description>Zeek Weird: DNS anomaly - $(zeek.weird_name) - $(zeek.srcip)</description>
+    <group>dns_anomaly,</group>
+  </rule>
+
+  <rule id="100451" level="5">
+    <if_sid>100308</if_sid>
+    <field name="zeek.weird_name" type="pcre2">^(tcp_|bad_)</field>
+    <description>Zeek Weird: TCP anomaly - $(zeek.weird_name) - $(zeek.srcip) -> $(zeek.dstip)</description>
+    <group>tcp_anomaly,</group>
+  </rule>
+
+  <rule id="100452" level="6">
+    <if_sid>100308</if_sid>
+    <field name="zeek.weird_name" type="pcre2">^http_</field>
+    <description>Zeek Weird: HTTP anomaly - $(zeek.weird_name) - $(zeek.srcip)</description>
+    <group>http_anomaly,</group>
+  </rule>
+
+  <!-- WHITELIST RULES -->
+
+  <rule id="100480" level="0">
+    <if_sid>100301,100302,100303,100304,100306,100307</if_sid>
+    <field name="zeek.srcip" type="pcre2">^(10\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[01])\.)</field>
+    <field name="zeek.dstip" type="pcre2">^(10\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[01])\.)</field>
+    <description>Zeek: Internal traffic (suppressed)</description>
+  </rule>
+
+  <rule id="100481" level="0">
+    <if_sid>100301</if_sid>
+    <field name="zeek.dstport" type="pcre2">^123$</field>
+    <field name="zeek.dstip" type="pcre2">^(216\.239\.35\.|129\.6\.15\.)</field>
+    <description>Zeek: Known NTP server traffic (suppressed)</description>
+  </rule>
+
+  <rule id="100482" level="0">
+    <if_sid>100330</if_sid>
+    <field name="zeek.dstip" type="pcre2">^(8\.8\.(8\.8|4\.4)|1\.(1\.1\.1|0\.0\.1)|9\.9\.9\.9)$</field>
+    <description>Zeek: DNS failure to public resolver (suppressed)</description>
+  </rule>
+
+</group>

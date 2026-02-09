@@ -1,0 +1,29 @@
+version: '3.8'
+
+services:
+  velociraptor:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        VELOCIRAPTOR_VERSION: "{{ velociraptor_version }}"
+    image: velociraptor-custom:{{ velociraptor_version }}
+    container_name: velociraptor-server
+    restart: unless-stopped
+    ports:
+      - "8000:8000"   # Frontend port (for agents)
+      - "8001:8001"   # API port
+      - "8889:8889"   # GUI port
+    volumes:
+      - ./config:/config
+      - ./data:/data
+      - ./logs:/logs
+    command: frontend -v --config /config/server.config.yaml
+    environment:
+      - TZ=America/New_York
+    networks:
+      - velociraptor-net
+
+networks:
+  velociraptor-net:
+    driver: bridge

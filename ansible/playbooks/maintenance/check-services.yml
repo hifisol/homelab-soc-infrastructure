@@ -1,0 +1,207 @@
+---
+# Ansible Playbook: Service Health Check
+# Verifies critical services are running on each server
+#
+# Usage:
+#   ansible-playbook -i inventory.ini check-services.yml
+#   ansible-playbook -i inventory.ini check-services.yml -l wazuh-manager  # Single host
+
+- name: Service Health Check - All Servers
+  hosts: linux
+  become: yes
+  gather_facts: yes
+  vars:
+    # Common services to check on all Linux hosts
+    common_services:
+      - sshd
+      - cron
+
+  tasks:
+    - name: Get system uptime
+      command: uptime -p
+      register: uptime_result
+      changed_when: false
+
+    - name: Get load average
+      shell: cat /proc/loadavg | awk '{print $1, $2, $3}'
+      register: load_result
+      changed_when: false
+
+    - name: Get memory usage
+      shell: free -h | grep Mem | awk '{print "Total:" $2 " Used:" $3 " Free:" $4}'
+      register: memory_result
+      changed_when: false
+
+    - name: Get disk usage
+      shell: df -h / | tail -1 | awk '{print "Size:" $2 " Used:" $3 " Avail:" $4 " Use%:" $5}'
+      register: disk_result
+      changed_when: false
+
+    - name: Check common services
+      systemd:
+        name: "{{ item }}"
+      register: common_service_status
+      loop: "{{ common_services }}"
+      ignore_errors: yes
+
+    - name: Display system health
+      debug:
+        msg: |
+          === {{ inventory_hostname }} ===
+          Uptime: {{ uptime_result.stdout }}
+          Load: {{ load_result.stdout }}
+          Memory: {{ memory_result.stdout }}
+          Disk: {{ disk_result.stdout }}
+
+# Wazuh Manager specific checks
+- name: Service Health Check - Wazuh Manager
+  hosts: wazuh
+  become: yes
+  tasks:
+    - name: Check Wazuh Manager services
+      systemd:
+        name: "{{ item }}"
+      register: wazuh_services
+      loop:
+        - wazuh-manager
+        - wazuh-indexer
+        - wazuh-dashboard
+      ignore_errors: yes
+
+    - name: Get Wazuh agent count
+      shell: /var/ossec/bin/agent_control -l | grep -c "Active" || echo "0"
+      register: agent_count
+      changed_when: false
+      ignore_errors: yes
+
+    - name: Display Wazuh status
+      debug:
+        msg: |
+          Wazuh Manager: {{ wazuh_services.results[0].status.ActiveState | default('unknown') }}
+          Wazuh Indexer: {{ wazuh_services.results[1].status.ActiveState | default('unknown') }}
+          Wazuh Dashboard: {{ wazuh_services.results[2].status.ActiveState | default('unknown') }}
+          Active Agents: {{ agent_count.stdout | default('unknown') }}
+
+# Threat Hunting server checks
+- name: Service Health Check - Threat Hunting
+  hosts: hunting
+  become: yes
+  tasks:
+    - name: Check hunting services
+      systemd:
+        name: "{{ item }}"
+      register: hunting_services
+      loop:
+        - wazuh-agent
+        - docker
+      ignore_errors: yes
+
+    - name: Check Docker containers
+      shell: docker ps --format "{{ '{{' }}.Names{{ '}}' }}: {{ '{{' }}.Status{{ '}}' }}" 2>/dev/null || echo "Docker not running"
+      register: docker_containers
+      changed_when: false
+      ignore_errors: yes
+
+    - name: Display hunting status
+      debug:
+        msg: |
+          Wazuh Agent: {{ hunting_services.results[0].status.ActiveState | default('unknown') }}
+          Docker: {{ hunting_services.results[1].status.ActiveState | default('unknown') }}
+          Containers:
+          {{ docker_containers.stdout }}
+
+# Docker Host checks
+- name: Service Health Check - Docker Host
+  hosts: docker
+  become: yes
+  tasks:
+    - name: Check Docker service
+      systemd:
+        name: docker
+      register: docker_service
+      ignore_errors: yes
+
+    - name: Check running containers
+      shell: docker ps --format "{{ '{{' }}.Names{{ '}}' }}: {{ '{{' }}.Status{{ '}}' }}" 2>/dev/null || echo "Docker not running"
+      register: docker_containers
+      changed_when: false
+      ignore_errors: yes
+
+    - name: Check Zabbix containers
+      shell: docker ps --filter "name=zabbix" --format "{{ '{{' }}.Names{{ '}}' }}: {{ '{{' }}.Status{{ '}}' }}" 2>/dev/null
+      register: zabbix_containers
+      changed_when: false
+      ignore_errors: yes
+
+    - name: Display Docker host status
+      debug:
+        msg: |
+          Docker Service: {{ docker_service.status.ActiveState | default('unknown') }}
+          Running Containers:
+          {{ docker_containers.stdout }}
+
+# Proxmox checks
+- name: Service Health Check - Proxmox
+  hosts: proxmox
+  become: yes
+  tasks:
+    - name: Check Proxmox services
+      systemd:
+        name: "{{ item }}"
+      register: proxmox_services
+      loop:
+        - pvedaemon
+        - pveproxy
+        - pve-cluster
+      ignore_errors: yes
+
+    - name: List VMs
+      shell: qm list 2>/dev/null || echo "No VMs or qm not available"
+      register: vm_list
+      changed_when: false
+      ignore_errors: yes
+
+    - name: Display Proxmox status
+      debug:
+        msg: |
+          PVE Daemon: {{ proxmox_services.results[0].status.ActiveState | default('unknown') }}
+          PVE Proxy: {{ proxmox_services.results[1].status.ActiveState | default('unknown') }}
+          PVE Cluster: {{ proxmox_services.results[2].status.ActiveState | default('unknown') }}
+          VMs:
+          {{ vm_list.stdout }}
+      when: proxmox_services is defined
+
+# NTHWK (GPU Compression) checks
+- name: Service Health Check - NTHWK
+  hosts: nthwk
+  become: yes
+  tasks:
+    - name: Check NVIDIA GPU
+      command: nvidia-smi --query-gpu=name,temperature.gpu,utilization.gpu,memory.used,memory.total --format=csv,noheader
+      register: gpu_status
+      changed_when: false
+      ignore_errors: yes
+
+    - name: Check for running ffmpeg
+      shell: pgrep -c ffmpeg || echo "0"
+      register: ffmpeg_count
+      changed_when: false
+
+    - name: Display NTHWK status
+      debug:
+        msg: |
+          GPU: {{ gpu_status.stdout | default('Not available') }}
+          Active ffmpeg processes: {{ ffmpeg_count.stdout }}
+
+# Summary
+- name: Health Check Summary
+  hosts: linux
+  gather_facts: no
+  tasks:
+    - name: Final connectivity check
+      ping:
+      register: ping_result
+
+    - name: Summary
+      debug:
+        msg: "{{ inventory_hostname }}: {{ 'OK' if ping_result.ping == 'pong' else 'FAILED' }}"

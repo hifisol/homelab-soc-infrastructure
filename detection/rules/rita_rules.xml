@@ -1,0 +1,235 @@
+<!--
+RITA Network Threat Analyzer Rules
+Rule IDs: 100200-100299
+-->
+<group name="rita,network,threat_hunting,">
+
+  <!-- Base RITA rule - match on database field containing localhost-rolling -->
+  <rule id="100200" level="3">
+    <decoded_as>json</decoded_as>
+    <field name="database">localhost-rolling</field>
+    <description>RITA network analysis event</description>
+  </rule>
+
+  <!-- Beacon Detection (C2 Activity) - High Score >= 0.95 -->
+  <rule id="100210" level="12">
+    <if_sid>100200</if_sid>
+    <field name="type">beacon</field>
+    <field name="score" type="pcre2">^0\.9[5-9]|^1\.</field>
+    <description>RITA: High-confidence beacon detected (C2) - $(src_ip) -> $(dst_ip) Score: $(score)</description>
+    <mitre>
+      <id>T1071</id>
+      <id>T1573</id>
+    </mitre>
+  </rule>
+
+  <!-- Beacon Detection - Medium Score 0.90-0.94 -->
+  <rule id="100211" level="10">
+    <if_sid>100200</if_sid>
+    <field name="type">beacon</field>
+    <field name="score" type="pcre2">^0\.9[0-4]</field>
+    <description>RITA: Medium-confidence beacon - $(src_ip) -> $(dst_ip) Score: $(score)</description>
+    <mitre>
+      <id>T1071</id>
+    </mitre>
+  </rule>
+
+  <!-- Beacon Detection - Low Score 0.70-0.89 -->
+  <rule id="100212" level="7">
+    <if_sid>100200</if_sid>
+    <field name="type">beacon</field>
+    <field name="score" type="pcre2">^0\.[7-8]</field>
+    <description>RITA: Low-confidence beacon - $(src_ip) -> $(dst_ip) Score: $(score)</description>
+  </rule>
+
+  <!-- ========== BEACON WHITELIST RULES ========== -->
+  <!-- These suppress false positives from known-good services that produce beacon-like patterns -->
+
+  <!-- Whitelist beacons to Tailscale DERP servers -->
+  <rule id="100250" level="0">
+    <if_sid>100210,100211,100212</if_sid>
+    <field name="dst_ip" type="pcre2">^(178\.156\.|5\.161\.218\.|49\.13\.204\.|208\.111\.|199\.38\.181\.|157\.180\.|162\.248\.221\.|199\.165\.136\.)</field>
+    <description>Ignore RITA beacons to Tailscale DERP servers</description>
+  </rule>
+
+  <!-- Whitelist beacons to Tailscale coordination servers -->
+  <rule id="100251" level="0">
+    <if_sid>100210,100211,100212</if_sid>
+    <field name="dst_ip" type="pcre2">^192\.200\.0\.</field>
+    <description>Ignore RITA beacons to Tailscale coordination servers</description>
+  </rule>
+
+  <!-- Whitelist beacons to Google services -->
+  <rule id="100252" level="0">
+    <if_sid>100210,100211,100212</if_sid>
+    <field name="dst_ip" type="pcre2">^(74\.125\.|142\.250\.|142\.251\.|172\.217\.|216\.239\.|34\.36\.|34\.148\.)</field>
+    <description>Ignore RITA beacons to Google services</description>
+  </rule>
+
+  <!-- Whitelist beacons to Microsoft services -->
+  <rule id="100253" level="0">
+    <if_sid>100210,100211,100212</if_sid>
+    <field name="dst_ip" type="pcre2">^(52\.123\.|72\.153\.|13\.107\.|20\.[0-9]+\.|172\.183\.)</field>
+    <description>Ignore RITA beacons to Microsoft services</description>
+  </rule>
+
+  <!-- Whitelist beacons to AWS services -->
+  <rule id="100254" level="0">
+    <if_sid>100210,100211,100212</if_sid>
+    <field name="dst_ip" type="pcre2">^(54\.92\.|44\.217\.|44\.239\.|52\.50\.|52\.85\.|13\.249\.|3\.33\.|44\.212\.)</field>
+    <description>Ignore RITA beacons to AWS services</description>
+  </rule>
+
+  <!-- Whitelist beacons to CDN/NTP services -->
+  <rule id="100255" level="0">
+    <if_sid>100210,100211,100212</if_sid>
+    <field name="dst_ip" type="pcre2">^(2\.16\.|199\.232\.|23\.142\.248\.|23\.227\.38\.)</field>
+    <description>Ignore RITA beacons to Akamai/Fastly/NTP services</description>
+  </rule>
+
+  <!-- Whitelist beacons to Valve/Steam game servers -->
+  <rule id="100256" level="0">
+    <if_sid>100210,100211,100212</if_sid>
+    <field name="dst_ip" type="pcre2">^(155\.133\.|185\.25\.183\.|162\.254\.)</field>
+    <description>Ignore RITA beacons to Valve/Steam game servers</description>
+  </rule>
+
+  <!-- Whitelist beacons to WAN IP (Tailscale NAT traversal) -->
+  <rule id="100257" level="0">
+    <if_sid>100210,100211,100212</if_sid>
+    <field name="dst_ip" type="pcre2">^YOUR_WAN_IP\.</field>
+    <description>Ignore RITA beacons to WAN IP (Tailscale NAT traversal)</description>
+  </rule>
+
+  <!-- Whitelist beacons to NTP servers -->
+  <rule id="100258" level="0">
+    <if_sid>100210,100211,100212</if_sid>
+    <field name="dst_ip" type="pcre2">^108.59.2.</field>
+    <description>Ignore RITA beacons to Leaseweb NTP servers</description>
+  </rule>
+
+  <!-- Whitelist beacons to Cloudflare DNS -->
+  <rule id="100259" level="0">
+    <if_sid>100210,100211,100212</if_sid>
+    <field name="dst_ip" type="pcre2">^1.1.1.</field>
+    <description>Ignore RITA beacons to Cloudflare DNS (1.1.1.x)</description>
+  </rule>
+
+  <!-- Whitelist IoT device beacons to cloud services -->
+  <rule id="100265" level="0">
+    <if_sid>100210,100211,100212</if_sid>
+    <field name="src_ip">10.0.4.11</field>
+    <description>Ignore IoT device beacon patterns to cloud services</description>
+  </rule>
+
+  <!-- Whitelist NTP pool server beacons -->
+  <!-- NTP clients poll at maxpoll=10 (1024s) producing ~84 connections/24h -->
+  <!-- which RITA flags as high-confidence beacons (0.97-0.99 score) -->
+  <rule id="100267" level="0">
+    <if_sid>100210,100211,100212</if_sid>
+    <field name="dst_ip" type="pcre2">^(23\.95\.49\.|23\.111\.186\.|209\.148\.110\.|99\.28\.14\.|104\.234\.61\.|192\.184\.140\.|65\.19\.142\.|149\.28\.61\.|149\.28\.200\.|50\.117\.3\.|198\.137\.202\.)</field>
+    <description>Ignore RITA beacons to NTP pool servers (pool.ntp.org)</description>
+  </rule>
+
+  <!-- ========== END BEACON WHITELIST ========== -->
+
+  <!-- Blacklisted IP Contact -->
+  <rule id="100220" level="14">
+    <if_sid>100200</if_sid>
+    <field name="type" type="pcre2">blacklist_</field>
+    <description>RITA: Blacklisted IP contact - $(src_ip) -> $(dst_ip)</description>
+    <mitre>
+      <id>T1071</id>
+    </mitre>
+  </rule>
+
+  <!-- Long Connection -->
+  <rule id="100230" level="8">
+    <if_sid>100200</if_sid>
+    <field name="type">long_connection</field>
+    <description>RITA: Long connection - $(src_ip) -> $(dst_ip) Duration: $(score)s</description>
+  </rule>
+
+  <!-- ========== LONG CONNECTION WHITELIST ========== -->
+
+  <!-- Whitelist long connections to Tailscale DERP servers -->
+  <rule id="100260" level="0">
+    <if_sid>100230</if_sid>
+    <field name="dst_ip" type="pcre2">^(178.156.152.|162.248.221.|199.165.136.|192.200.0.)</field>
+    <description>Ignore long connections to Tailscale DERP/coordination servers</description>
+  </rule>
+
+  <!-- Whitelist long connections to Google FCM (port 5228) -->
+  <rule id="100261" level="0">
+    <if_sid>100230</if_sid>
+    <field name="dst_ip" type="pcre2">^(74.125.|142.250.|142.251.|172.217.|209.85.)</field>
+    <description>Ignore long connections to Google services (FCM/GCM push)</description>
+  </rule>
+
+  <!-- Whitelist long connections to Apple APNS (port 5223) -->
+  <rule id="100262" level="0">
+    <if_sid>100230</if_sid>
+    <field name="dst_ip" type="pcre2">^17.</field>
+    <description>Ignore long connections to Apple services (APNS push)</description>
+  </rule>
+
+  <!-- Whitelist long connections to AWS/Azure cloud services -->
+  <rule id="100263" level="0">
+    <if_sid>100230</if_sid>
+    <field name="dst_ip" type="pcre2">^(52.21.|20.59.|20.150.|161.38.184.)</field>
+    <description>Ignore long connections to AWS/Azure cloud services</description>
+  </rule>
+
+  <!-- Whitelist IoT device long connections to cloud services -->
+  <rule id="100264" level="0">
+    <if_sid>100230</if_sid>
+    <field name="src_ip">10.0.4.11</field>
+    <description>Ignore IoT device long connections to cloud services</description>
+  </rule>
+
+  <!-- Whitelist workstation long connections to gaming/cloud services -->
+  <rule id="100266" level="0">
+    <if_sid>100230</if_sid>
+    <field name="src_ip">10.0.3.10</field>
+    <description>Ignore workstation long connections to Steam/AWS game servers</description>
+  </rule>
+
+  <!-- Whitelist Proxmox host to WAN IP (Tailscale NAT traversal) -->
+  <rule id="100268" level="0">
+    <if_sid>100230</if_sid>
+    <field name="src_ip">10.0.2.11</field>
+    <field name="dst_ip" type="pcre2">^YOUR_WAN_IP\.</field>
+    <description>Ignore Proxmox host Tailscale long connections to WAN IP</description>
+  </rule>
+
+  <!-- Whitelist Wazuh manager to WAN IP (Tailscale NAT traversal) -->
+  <rule id="100269" level="0">
+    <if_sid>100230</if_sid>
+    <field name="src_ip">10.0.1.10</field>
+    <field name="dst_ip" type="pcre2">^YOUR_WAN_IP\.</field>
+    <description>Ignore Wazuh manager Tailscale long connections to WAN IP</description>
+  </rule>
+  <!-- ========== END LONG CONNECTION WHITELIST ========== -->
+
+  <!-- Port Scan (Strobe) -->
+  <rule id="100240" level="10">
+    <if_sid>100200</if_sid>
+    <field name="type">strobe</field>
+    <description>RITA: Port scan detected - $(src_ip) -> $(dst_ip)</description>
+    <mitre>
+      <id>T1046</id>
+    </mitre>
+  </rule>
+
+  <!-- ========== STROBE WHITELIST RULES ========== -->
+
+  <!-- Whitelist strobes to known telemetry endpoints -->
+  <rule id="100270" level="0">
+    <if_sid>100240</if_sid>
+    <field name="dst_ip">34.36.57.103</field>
+    <description>Ignore RITA strobe to known telemetry endpoint</description>
+  </rule>
+
+  <!-- ========== END STROBE WHITELIST ========== -->
+
+</group>

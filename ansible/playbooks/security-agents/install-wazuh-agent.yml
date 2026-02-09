@@ -1,0 +1,105 @@
+---
+- name: Install Wazuh Agent and Tailscale on Raiders hosts
+  hosts: Raiders
+  become: yes
+  vars:
+    wazuh_manager_ip: "10.0.1.10"
+    wazuh_agent_name: "{{ inventory_hostname }}"
+
+  tasks:
+    # --- SECTION 1: SYSTEM PREP ---
+    - name: Update apt cache
+      ansible.builtin.apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Install required dependencies
+      ansible.builtin.apt:
+        name:
+          - curl
+          - apt-transport-https
+          - lsb-release
+          - gnupg
+        state: present
+
+    # --- SECTION 2: WAZUH AGENT INSTALLATION ---
+    - name: Add Wazuh GPG key
+      ansible.builtin.shell: |
+        curl -s https://packages.wazuh.com/key/GPG-KEY-WAZUH | gpg --no-default-keyring --keyring gnupg-ring:/usr/share/keyrings/wazuh.gpg --import && chmod 644 /usr/share/keyrings/wazuh.gpg
+      args:
+        creates: /usr/share/keyrings/wazuh.gpg
+
+    - name: Add Wazuh repository
+      ansible.builtin.shell: |
+        echo "deb [signed-by=/usr/share/keyrings/wazuh.gpg] https://packages.wazuh.com/4.x/apt/ stable main" | tee -a /etc/apt/sources.list.d/wazuh.list
+      args:
+        creates: /etc/apt/sources.list.d/wazuh.list
+
+    - name: Update apt cache after adding Wazuh repo
+      ansible.builtin.apt:
+        update_cache: yes
+
+    - name: Install Wazuh agent
+      ansible.builtin.apt:
+        name: wazuh-agent
+        state: present
+      environment:
+        WAZUH_MANAGER: "{{ wazuh_manager_ip }}"
+        WAZUH_AGENT_NAME: "{{ wazuh_agent_name }}"
+
+    - name: Configure Wazuh agent manager IP
+      ansible.builtin.lineinfile:
+        path: /var/ossec/etc/ossec.conf
+        regexp: '<address>.*</address>'
+        line: "    <address>{{ wazuh_manager_ip }}</address>"
+        backrefs: yes
+
+    - name: Enable and start Wazuh agent service
+      ansible.builtin.service:
+        name: wazuh-agent
+        state: started
+        enabled: yes
+
+    - name: Restart Wazuh agent to apply configuration
+      ansible.builtin.service:
+        name: wazuh-agent
+        state: restarted
+
+    # --- SECTION 3: TAILSCALE INSTALLATION ---
+    - name: Add Tailscale GPG key
+      ansible.builtin.shell: |
+        mkdir -p --mode=0755 /usr/share/keyrings
+        curl -fsSL https://pkgs.tailscale.com/stable/ubuntu/$(lsb_release -cs).noarmor.gpg | tee /usr/share/keyrings/tailscale-archive-keyring.gpg >/dev/null
+      args:
+        creates: /usr/share/keyrings/tailscale-archive-keyring.gpg
+
+    - name: Add Tailscale repository
+      ansible.builtin.shell: |
+        curl -fsSL https://pkgs.tailscale.com/stable/ubuntu/$(lsb_release -cs).tailscale-keyring.list | tee /etc/apt/sources.list.d/tailscale.list
+      args:
+        creates: /etc/apt/sources.list.d/tailscale.list
+
+    - name: Update apt cache after adding Tailscale repo
+      ansible.builtin.apt:
+        update_cache: yes
+
+    - name: Install Tailscale
+      ansible.builtin.apt:
+        name: tailscale
+        state: present
+
+    - name: Enable Tailscale service
+      ansible.builtin.service:
+        name: tailscaled
+        state: started
+        enabled: yes
+
+    - name: Display Tailscale authentication URL
+      ansible.builtin.command: tailscale up --authkey=
+      register: tailscale_output
+      failed_when: false
+      changed_when: false
+
+    - name: Show Tailscale status
+      ansible.builtin.debug:
+        msg: "Tailscale installed. Run 'tailscale up' on the host to authenticate and connect to your tailnet."

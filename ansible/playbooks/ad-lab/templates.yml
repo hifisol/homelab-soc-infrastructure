@@ -1,0 +1,522 @@
+---
+# =============================================================================
+# AD Lab - Template Creation Playbook
+# =============================================================================
+# Creates reusable VM templates on proxmox-host (Proxmox).
+#
+# Cloud-init templates (Ubuntu/Debian) are fully automated.
+# ISO-based templates (Windows/Kali/Parrot/etc.) create VM shells that need
+# manual OS installation, then finalization via --tags tmpl-finalize.
+#
+# Usage:
+#   ansible-playbook playbooks/ad-lab-templates.yml                      # All templates
+#   ansible-playbook playbooks/ad-lab-templates.yml --tags tmpl-ubuntu   # Single template
+#   ansible-playbook playbooks/ad-lab-templates.yml --tags tmpl-finalize -e tmpl_vmid=104
+# =============================================================================
+
+# =============================================================================
+# PLAY 1: Cloud Image Templates (automated - SSH to PM-1 for image import)
+# =============================================================================
+- name: Create Cloud-Init Templates on proxmox-host
+  hosts: proxmox-host
+  become: yes
+  gather_facts: no
+  vars_files:
+    - ../vars/vault.yml
+    - ../vars/ad-lab.yml
+
+  tasks:
+    # --- Ubuntu 24.04 Cloud-Init Template ---
+    - name: Create cloud image download directory
+      ansible.builtin.file:
+        path: "{{ cloud_image_dir }}"
+        state: directory
+        mode: "0755"
+      tags: [tmpl-ubuntu, tmpl-debian]
+
+    - name: Download Ubuntu 24.04 cloud image
+      ansible.builtin.get_url:
+        url: "{{ cloud_images.ubuntu_2404.url }}"
+        dest: "{{ cloud_image_dir }}/{{ cloud_images.ubuntu_2404.filename }}"
+        mode: "0644"
+      tags: [tmpl-ubuntu]
+
+    - name: Check if Ubuntu template VM already exists
+      ansible.builtin.shell: "qm status {{ templates.ubuntu_2404.vmid }}"
+      register: ubuntu_tmpl_check
+      failed_when: false
+      changed_when: false
+      tags: [tmpl-ubuntu]
+
+    - name: Create Ubuntu 24.04 template VM shell
+      ansible.builtin.shell: |
+        qm create {{ templates.ubuntu_2404.vmid }} \
+          --name {{ templates.ubuntu_2404.name }} \
+          --memory {{ templates.ubuntu_2404.memory }} \
+          --cores {{ templates.ubuntu_2404.cores }} \
+          --cpu cputype=host \
+          --machine {{ templates.ubuntu_2404.machine }} \
+          --ostype {{ templates.ubuntu_2404.os_type }} \
+          --scsihw virtio-scsi-single \
+          --net0 virtio,bridge=vmbr0 \
+          --agent enabled=1 \
+          --onboot 0
+      when: ubuntu_tmpl_check.rc != 0
+      tags: [tmpl-ubuntu]
+
+    - name: Import Ubuntu cloud image as disk
+      ansible.builtin.shell: >
+        qm importdisk {{ templates.ubuntu_2404.vmid }}
+        {{ cloud_image_dir }}/{{ cloud_images.ubuntu_2404.filename }}
+        {{ vm_storage }}
+      when: ubuntu_tmpl_check.rc != 0
+      tags: [tmpl-ubuntu]
+
+    - name: Attach imported disk to Ubuntu template
+      ansible.builtin.shell: >
+        qm set {{ templates.ubuntu_2404.vmid }}
+        --scsi0 {{ vm_storage }}:vm-{{ templates.ubuntu_2404.vmid }}-disk-0,iothread=1,discard=on,ssd=1
+        --boot order=scsi0
+      when: ubuntu_tmpl_check.rc != 0
+      tags: [tmpl-ubuntu]
+
+    - name: Resize Ubuntu template disk
+      ansible.builtin.shell: >
+        qm resize {{ templates.ubuntu_2404.vmid }} scsi0 {{ templates.ubuntu_2404.disk_size }}
+      when: ubuntu_tmpl_check.rc != 0
+      tags: [tmpl-ubuntu]
+
+    - name: Add cloud-init drive to Ubuntu template
+      ansible.builtin.shell: >
+        qm set {{ templates.ubuntu_2404.vmid }}
+        --ide2 {{ vm_storage }}:cloudinit
+      when: ubuntu_tmpl_check.rc != 0
+      tags: [tmpl-ubuntu]
+
+    - name: Configure cloud-init defaults on Ubuntu template
+      ansible.builtin.shell: >
+        qm set {{ templates.ubuntu_2404.vmid }}
+        --ciuser {{ cloudinit_user }}
+        --sshkeys /home/deploy-svc/.ssh/authorized_keys
+        --ipconfig0 ip=dhcp
+        --citype nocloud
+      when: ubuntu_tmpl_check.rc != 0
+      tags: [tmpl-ubuntu]
+
+    - name: Convert Ubuntu VM to template
+      ansible.builtin.shell: "qm template {{ templates.ubuntu_2404.vmid }}"
+      when: ubuntu_tmpl_check.rc != 0
+      tags: [tmpl-ubuntu]
+
+    - name: Ubuntu template created
+      ansible.builtin.debug:
+        msg: "Template {{ templates.ubuntu_2404.name }} (VMID {{ templates.ubuntu_2404.vmid }}) ready"
+      tags: [tmpl-ubuntu]
+
+    # --- Debian 12 Cloud-Init Template ---
+    - name: Download Debian 12 cloud image
+      ansible.builtin.get_url:
+        url: "{{ cloud_images.debian_12.url }}"
+        dest: "{{ cloud_image_dir }}/{{ cloud_images.debian_12.filename }}"
+        mode: "0644"
+      tags: [tmpl-debian]
+
+    - name: Check if Debian template VM already exists
+      ansible.builtin.shell: "qm status {{ templates.debian_12.vmid }}"
+      register: debian_tmpl_check
+      failed_when: false
+      changed_when: false
+      tags: [tmpl-debian]
+
+    - name: Create Debian 12 template VM shell
+      ansible.builtin.shell: |
+        qm create {{ templates.debian_12.vmid }} \
+          --name {{ templates.debian_12.name }} \
+          --memory {{ templates.debian_12.memory }} \
+          --cores {{ templates.debian_12.cores }} \
+          --cpu cputype=host \
+          --machine {{ templates.debian_12.machine }} \
+          --ostype {{ templates.debian_12.os_type }} \
+          --scsihw virtio-scsi-single \
+          --net0 virtio,bridge=vmbr0 \
+          --agent enabled=1 \
+          --onboot 0
+      when: debian_tmpl_check.rc != 0
+      tags: [tmpl-debian]
+
+    - name: Import Debian cloud image as disk
+      ansible.builtin.shell: >
+        qm importdisk {{ templates.debian_12.vmid }}
+        {{ cloud_image_dir }}/{{ cloud_images.debian_12.filename }}
+        {{ vm_storage }}
+      when: debian_tmpl_check.rc != 0
+      tags: [tmpl-debian]
+
+    - name: Attach imported disk to Debian template
+      ansible.builtin.shell: >
+        qm set {{ templates.debian_12.vmid }}
+        --scsi0 {{ vm_storage }}:vm-{{ templates.debian_12.vmid }}-disk-0,iothread=1,discard=on,ssd=1
+        --boot order=scsi0
+      when: debian_tmpl_check.rc != 0
+      tags: [tmpl-debian]
+
+    - name: Resize Debian template disk
+      ansible.builtin.shell: >
+        qm resize {{ templates.debian_12.vmid }} scsi0 {{ templates.debian_12.disk_size }}
+      when: debian_tmpl_check.rc != 0
+      tags: [tmpl-debian]
+
+    - name: Add cloud-init drive to Debian template
+      ansible.builtin.shell: >
+        qm set {{ templates.debian_12.vmid }}
+        --ide2 {{ vm_storage }}:cloudinit
+      when: debian_tmpl_check.rc != 0
+      tags: [tmpl-debian]
+
+    - name: Configure cloud-init defaults on Debian template
+      ansible.builtin.shell: >
+        qm set {{ templates.debian_12.vmid }}
+        --ciuser {{ cloudinit_user }}
+        --sshkeys /home/deploy-svc/.ssh/authorized_keys
+        --ipconfig0 ip=dhcp
+        --citype nocloud
+      when: debian_tmpl_check.rc != 0
+      tags: [tmpl-debian]
+
+    - name: Convert Debian VM to template
+      ansible.builtin.shell: "qm template {{ templates.debian_12.vmid }}"
+      when: debian_tmpl_check.rc != 0
+      tags: [tmpl-debian]
+
+    - name: Debian template created
+      ansible.builtin.debug:
+        msg: "Template {{ templates.debian_12.name }} (VMID {{ templates.debian_12.vmid }}) ready"
+      tags: [tmpl-debian]
+
+# =============================================================================
+# PLAY 2: ISO-Based Template Shells (manual OS install required)
+# =============================================================================
+- name: Create ISO-Based Template Shells on proxmox-host
+  hosts: proxmox-host
+  become: yes
+  gather_facts: no
+  vars_files:
+    - ../vars/vault.yml
+    - ../vars/ad-lab.yml
+
+  tasks:
+    # --- Windows 10 LTSC Template ---
+    - name: Check if Win10 LTSC template VM already exists
+      ansible.builtin.shell: "qm status {{ templates.win10_ltsc.vmid }}"
+      register: win10_tmpl_check
+      failed_when: false
+      changed_when: false
+      tags: [tmpl-win10, tmpl-create]
+
+    - name: Create Win10 LTSC template VM shell
+      ansible.builtin.shell: |
+        qm create {{ templates.win10_ltsc.vmid }} \
+          --name {{ templates.win10_ltsc.name }} \
+          --memory {{ templates.win10_ltsc.memory }} \
+          --cores {{ templates.win10_ltsc.cores }} \
+          --cpu cputype=host \
+          --machine {{ templates.win10_ltsc.machine }} \
+          --ostype {{ templates.win10_ltsc.os_type }} \
+          --bios ovmf \
+          --efidisk0 {{ vm_storage }}:1,efitype=4m,pre-enrolled-keys=1 \
+          --tpmstate0 {{ vm_storage }}:1,version=v2.0 \
+          --scsihw virtio-scsi-single \
+          --scsi0 {{ vm_storage }}:{{ templates.win10_ltsc.disk_size | regex_replace('G','') }},iothread=1,discard=on,ssd=1 \
+          --ide0 {{ iso_storage }}:iso/{{ templates.win10_ltsc.iso }},media=cdrom \
+          --ide2 {{ iso_storage }}:iso/{{ virtio_iso }},media=cdrom \
+          --net0 virtio,bridge=vmbr0 \
+          --agent enabled=1 \
+          --onboot 0 \
+          --boot order='ide0;scsi0'
+      when: win10_tmpl_check.rc != 0
+      tags: [tmpl-win10, tmpl-create]
+
+    - name: Win10 LTSC shell created - manual install required
+      ansible.builtin.debug:
+        msg: >-
+          VMID {{ templates.win10_ltsc.vmid }} ({{ templates.win10_ltsc.name }}) created.
+          Boot via Proxmox console, install Windows, install VirtIO drivers + QEMU GA,
+          run sysprep, then finalize with --tags tmpl-finalize -e tmpl_vmid={{ templates.win10_ltsc.vmid }}
+      when: win10_tmpl_check.rc != 0
+      tags: [tmpl-win10, tmpl-create]
+
+    # --- Windows Server 2022 Template ---
+    - name: Check if WinServer 2022 template VM already exists
+      ansible.builtin.shell: "qm status {{ templates.winserver_2022.vmid }}"
+      register: winserver_tmpl_check
+      failed_when: false
+      changed_when: false
+      tags: [tmpl-winserver, tmpl-create]
+
+    - name: Create WinServer 2022 template VM shell
+      ansible.builtin.shell: |
+        qm create {{ templates.winserver_2022.vmid }} \
+          --name {{ templates.winserver_2022.name }} \
+          --memory {{ templates.winserver_2022.memory }} \
+          --cores {{ templates.winserver_2022.cores }} \
+          --cpu cputype=host \
+          --machine {{ templates.winserver_2022.machine }} \
+          --ostype {{ templates.winserver_2022.os_type }} \
+          --bios ovmf \
+          --efidisk0 {{ vm_storage }}:1,efitype=4m,pre-enrolled-keys=1 \
+          --tpmstate0 {{ vm_storage }}:1,version=v2.0 \
+          --scsihw virtio-scsi-single \
+          --scsi0 {{ vm_storage }}:{{ templates.winserver_2022.disk_size | regex_replace('G','') }},iothread=1,discard=on,ssd=1 \
+          --ide0 {{ iso_storage }}:iso/{{ templates.winserver_2022.iso }},media=cdrom \
+          --ide2 {{ iso_storage }}:iso/{{ virtio_iso }},media=cdrom \
+          --net0 virtio,bridge=vmbr0 \
+          --agent enabled=1 \
+          --onboot 0 \
+          --boot order='ide0;scsi0'
+      when: winserver_tmpl_check.rc != 0
+      tags: [tmpl-winserver, tmpl-create]
+
+    - name: WinServer 2022 shell created - manual install required
+      ansible.builtin.debug:
+        msg: >-
+          VMID {{ templates.winserver_2022.vmid }} ({{ templates.winserver_2022.name }}) created.
+          Boot via console, install Windows Server, install VirtIO drivers + QEMU GA,
+          run sysprep, then finalize with --tags tmpl-finalize -e tmpl_vmid={{ templates.winserver_2022.vmid }}
+      when: winserver_tmpl_check.rc != 0
+      tags: [tmpl-winserver, tmpl-create]
+
+    # --- Kali Linux Template ---
+    - name: Check if Kali template VM already exists
+      ansible.builtin.shell: "qm status {{ templates.kali.vmid }}"
+      register: kali_tmpl_check
+      failed_when: false
+      changed_when: false
+      tags: [tmpl-kali, tmpl-create]
+
+    - name: Create Kali template VM shell
+      ansible.builtin.shell: |
+        qm create {{ templates.kali.vmid }} \
+          --name {{ templates.kali.name }} \
+          --memory {{ templates.kali.memory }} \
+          --cores {{ templates.kali.cores }} \
+          --cpu cputype=host \
+          --machine {{ templates.kali.machine }} \
+          --ostype {{ templates.kali.os_type }} \
+          --bios ovmf \
+          --efidisk0 {{ vm_storage }}:1,efitype=4m,pre-enrolled-keys=0 \
+          --scsihw virtio-scsi-single \
+          --scsi0 {{ vm_storage }}:{{ templates.kali.disk_size | regex_replace('G','') }},iothread=1,discard=on,ssd=1 \
+          --ide0 {{ iso_storage }}:iso/{{ templates.kali.iso }},media=cdrom \
+          --net0 virtio,bridge=vmbr0 \
+          --agent enabled=1 \
+          --onboot 0 \
+          --boot order='ide0;scsi0'
+      when: kali_tmpl_check.rc != 0
+      tags: [tmpl-kali, tmpl-create]
+
+    - name: Kali shell created - manual install required
+      ansible.builtin.debug:
+        msg: >-
+          VMID {{ templates.kali.vmid }} ({{ templates.kali.name }}) created.
+          Boot via console, install Kali (minimal), install qemu-guest-agent,
+          then finalize with --tags tmpl-finalize -e tmpl_vmid={{ templates.kali.vmid }}
+      when: kali_tmpl_check.rc != 0
+      tags: [tmpl-kali, tmpl-create]
+
+    # --- ParrotOS Template ---
+    - name: Check if ParrotOS template VM already exists
+      ansible.builtin.shell: "qm status {{ templates.parrot.vmid }}"
+      register: parrot_tmpl_check
+      failed_when: false
+      changed_when: false
+      tags: [tmpl-parrot, tmpl-create]
+
+    - name: Create ParrotOS template VM shell
+      ansible.builtin.shell: |
+        qm create {{ templates.parrot.vmid }} \
+          --name {{ templates.parrot.name }} \
+          --memory {{ templates.parrot.memory }} \
+          --cores {{ templates.parrot.cores }} \
+          --cpu cputype=host \
+          --machine {{ templates.parrot.machine }} \
+          --ostype {{ templates.parrot.os_type }} \
+          --scsihw virtio-scsi-single \
+          --scsi0 {{ vm_storage }}:{{ templates.parrot.disk_size | regex_replace('G','') }},iothread=1,discard=on,ssd=1 \
+          --ide0 {{ iso_storage }}:iso/{{ templates.parrot.iso }},media=cdrom \
+          --net0 virtio,bridge=vmbr0 \
+          --agent enabled=1 \
+          --onboot 0 \
+          --boot order='ide0;scsi0'
+      when: parrot_tmpl_check.rc != 0
+      tags: [tmpl-parrot, tmpl-create]
+
+    - name: ParrotOS shell created - manual install required
+      ansible.builtin.debug:
+        msg: >-
+          VMID {{ templates.parrot.vmid }} ({{ templates.parrot.name }}) created.
+          Boot via console (SeaBIOS), install ParrotOS, install qemu-guest-agent,
+          then finalize with --tags tmpl-finalize -e tmpl_vmid={{ templates.parrot.vmid }}
+      when: parrot_tmpl_check.rc != 0
+      tags: [tmpl-parrot, tmpl-create]
+
+    # --- DragonOS Template ---
+    - name: Check if DragonOS template VM already exists
+      ansible.builtin.shell: "qm status {{ templates.dragonos.vmid }}"
+      register: dragonos_tmpl_check
+      failed_when: false
+      changed_when: false
+      tags: [tmpl-dragonos, tmpl-create]
+
+    - name: Create DragonOS template VM shell
+      ansible.builtin.shell: |
+        qm create {{ templates.dragonos.vmid }} \
+          --name {{ templates.dragonos.name }} \
+          --memory {{ templates.dragonos.memory }} \
+          --cores {{ templates.dragonos.cores }} \
+          --cpu cputype=host \
+          --machine {{ templates.dragonos.machine }} \
+          --ostype {{ templates.dragonos.os_type }} \
+          --scsihw virtio-scsi-single \
+          --scsi0 {{ vm_storage }}:{{ templates.dragonos.disk_size | regex_replace('G','') }},iothread=1,discard=on,ssd=1 \
+          --ide0 {{ iso_storage }}:iso/{{ templates.dragonos.iso }},media=cdrom \
+          --net0 virtio,bridge=vmbr0 \
+          --agent enabled=1 \
+          --onboot 0 \
+          --boot order='ide0;scsi0'
+      when: dragonos_tmpl_check.rc != 0
+      tags: [tmpl-dragonos, tmpl-create]
+
+    - name: DragonOS shell created - manual install required
+      ansible.builtin.debug:
+        msg: >-
+          VMID {{ templates.dragonos.vmid }} ({{ templates.dragonos.name }}) created.
+          Boot via console, install DragonOS, install qemu-guest-agent,
+          then finalize with --tags tmpl-finalize -e tmpl_vmid={{ templates.dragonos.vmid }}
+      when: dragonos_tmpl_check.rc != 0
+      tags: [tmpl-dragonos, tmpl-create]
+
+    # --- BlackArch Template ---
+    - name: Check if BlackArch template VM already exists
+      ansible.builtin.shell: "qm status {{ templates.blackarch.vmid }}"
+      register: blackarch_tmpl_check
+      failed_when: false
+      changed_when: false
+      tags: [tmpl-blackarch, tmpl-create]
+
+    - name: Create BlackArch template VM shell
+      ansible.builtin.shell: |
+        qm create {{ templates.blackarch.vmid }} \
+          --name {{ templates.blackarch.name }} \
+          --memory {{ templates.blackarch.memory }} \
+          --cores {{ templates.blackarch.cores }} \
+          --cpu cputype=host \
+          --machine {{ templates.blackarch.machine }} \
+          --ostype {{ templates.blackarch.os_type }} \
+          --scsihw virtio-scsi-single \
+          --scsi0 {{ vm_storage }}:{{ templates.blackarch.disk_size | regex_replace('G','') }},iothread=1,discard=on,ssd=1 \
+          --ide0 {{ iso_storage }}:iso/{{ templates.blackarch.iso }},media=cdrom \
+          --net0 virtio,bridge=vmbr0 \
+          --agent enabled=1 \
+          --onboot 0 \
+          --boot order='ide0;scsi0'
+      when: blackarch_tmpl_check.rc != 0
+      tags: [tmpl-blackarch, tmpl-create]
+
+    - name: BlackArch shell created - manual install required
+      ansible.builtin.debug:
+        msg: >-
+          VMID {{ templates.blackarch.vmid }} ({{ templates.blackarch.name }}) created.
+          Boot via console, install BlackArch (slim), install qemu-guest-agent,
+          then finalize with --tags tmpl-finalize -e tmpl_vmid={{ templates.blackarch.vmid }}
+      when: blackarch_tmpl_check.rc != 0
+      tags: [tmpl-blackarch, tmpl-create]
+
+    # --- Security Onion Template ---
+    - name: Check if Security Onion template VM already exists
+      ansible.builtin.shell: "qm status {{ templates.seconion.vmid }}"
+      register: seconion_tmpl_check
+      failed_when: false
+      changed_when: false
+      tags: [tmpl-seconion, tmpl-create]
+
+    - name: Create Security Onion template VM shell
+      ansible.builtin.shell: |
+        qm create {{ templates.seconion.vmid }} \
+          --name {{ templates.seconion.name }} \
+          --memory {{ templates.seconion.memory }} \
+          --cores {{ templates.seconion.cores }} \
+          --cpu cputype=host \
+          --machine {{ templates.seconion.machine }} \
+          --ostype {{ templates.seconion.os_type }} \
+          --scsihw virtio-scsi-single \
+          --scsi0 {{ vm_storage }}:{{ templates.seconion.disk_size | regex_replace('G','') }},iothread=1,discard=on,ssd=1 \
+          --ide0 {{ iso_storage }}:iso/{{ templates.seconion.iso }},media=cdrom \
+          --net0 virtio,bridge=vmbr0 \
+          --agent enabled=1 \
+          --onboot 0 \
+          --boot order='ide0;scsi0'
+      when: seconion_tmpl_check.rc != 0
+      tags: [tmpl-seconion, tmpl-create]
+
+    - name: Security Onion shell created - manual install required
+      ansible.builtin.debug:
+        msg: >-
+          VMID {{ templates.seconion.vmid }} ({{ templates.seconion.name }}) created.
+          Boot via console, install Security Onion (standalone), install qemu-guest-agent,
+          then finalize with --tags tmpl-finalize -e tmpl_vmid={{ templates.seconion.vmid }}
+      when: seconion_tmpl_check.rc != 0
+      tags: [tmpl-seconion, tmpl-create]
+
+# =============================================================================
+# PLAY 3: Finalize Template (remove ISOs, convert to template)
+# =============================================================================
+- name: Finalize ISO-Based Template
+  hosts: proxmox-host
+  become: yes
+  gather_facts: no
+  vars_files:
+    - ../vars/vault.yml
+    - ../vars/ad-lab.yml
+
+  tasks:
+    - name: Validate tmpl_vmid is provided
+      ansible.builtin.fail:
+        msg: "You must specify the template VMID: -e tmpl_vmid=<id>"
+      when: tmpl_vmid is not defined
+      tags: [tmpl-finalize]
+
+    - name: Ensure VM is stopped before converting to template
+      ansible.builtin.shell: "qm shutdown {{ tmpl_vmid }} --forceStop 1 --timeout 30 || true"
+      tags: [tmpl-finalize]
+
+    - name: Wait for VM to stop
+      ansible.builtin.shell: "qm wait {{ tmpl_vmid }} --timeout 60"
+      failed_when: false
+      tags: [tmpl-finalize]
+
+    - name: Remove ISO from ide0
+      ansible.builtin.shell: "qm set {{ tmpl_vmid }} --delete ide0"
+      failed_when: false
+      tags: [tmpl-finalize]
+
+    - name: Remove VirtIO ISO from ide2 (if present)
+      ansible.builtin.shell: "qm set {{ tmpl_vmid }} --delete ide2"
+      failed_when: false
+      tags: [tmpl-finalize]
+
+    - name: Remove NIC bridge assignment (network-agnostic template)
+      ansible.builtin.shell: "qm set {{ tmpl_vmid }} --net0 virtio"
+      tags: [tmpl-finalize]
+
+    - name: Set boot order to disk only
+      ansible.builtin.shell: "qm set {{ tmpl_vmid }} --boot order=scsi0"
+      tags: [tmpl-finalize]
+
+    - name: Convert VM to template
+      ansible.builtin.shell: "qm template {{ tmpl_vmid }}"
+      tags: [tmpl-finalize]
+
+    - name: Template finalized
+      ansible.builtin.debug:
+        msg: "VMID {{ tmpl_vmid }} converted to template. Ready for cloning."
+      tags: [tmpl-finalize]

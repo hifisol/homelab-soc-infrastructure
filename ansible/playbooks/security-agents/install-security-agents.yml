@@ -1,0 +1,184 @@
+---
+- name: Install Velociraptor and Wazuh Agents on All Devices
+  hosts: all
+  become: yes
+  vars:
+    # Velociraptor Configuration
+    velociraptor_server_url: "https://10.0.1.20:8000"  # Change to your Velociraptor server
+    velociraptor_config_url: ""  # Optional: URL to download client config
+    velociraptor_install_dir: "/opt/velociraptor"
+
+    # Wazuh Configuration
+    wazuh_manager_ip: "10.0.1.10"
+    wazuh_agent_name: "{{ inventory_hostname }}"
+
+    # Control flags - set to 'no' to skip installation
+    install_velociraptor: yes
+    install_wazuh: yes
+
+  tasks:
+    # --- SECTION 1: SYSTEM PREP ---
+    - name: Update apt cache
+      ansible.builtin.apt:
+        update_cache: yes
+        cache_valid_time: 3600
+      tags: [prep, velociraptor, wazuh]
+
+    - name: Install required dependencies
+      ansible.builtin.apt:
+        name:
+          - curl
+          - wget
+          - apt-transport-https
+          - lsb-release
+          - gnupg
+          - ca-certificates
+        state: present
+      tags: [prep, velociraptor, wazuh]
+
+    # --- SECTION 2: VELOCIRAPTOR AGENT INSTALLATION ---
+    - name: Check if Velociraptor agent already installed
+      ansible.builtin.stat:
+        path: /usr/local/bin/velociraptor
+      register: velociraptor_exists
+      when: install_velociraptor
+      tags: [velociraptor]
+
+    - name: Create Velociraptor directory
+      ansible.builtin.file:
+        path: "{{ velociraptor_install_dir }}"
+        state: directory
+        mode: '0755'
+      when: install_velociraptor and not velociraptor_exists.stat.exists
+      tags: [velociraptor]
+
+    - name: Download Velociraptor client binary (ARM64)
+      ansible.builtin.get_url:
+        url: "https://github.com/Velocidex/velociraptor/releases/download/v0.75/velociraptor-v0.75.0-linux-arm64"
+        dest: "/usr/local/bin/velociraptor"
+        mode: '0755'
+      when:
+        - install_velociraptor
+        - not velociraptor_exists.stat.exists
+        - ansible_architecture == "aarch64"
+      tags: [velociraptor]
+
+    - name: Download Velociraptor client binary (AMD64)
+      ansible.builtin.get_url:
+        url: "https://github.com/Velocidex/velociraptor/releases/download/v0.75/velociraptor-v0.75.0-linux-amd64"
+        dest: "/usr/local/bin/velociraptor"
+        mode: '0755'
+      when:
+        - install_velociraptor
+        - not velociraptor_exists.stat.exists
+        - ansible_architecture == "x86_64"
+      tags: [velociraptor]
+
+    - name: Display Velociraptor configuration instructions
+      ansible.builtin.debug:
+        msg:
+          - "IMPORTANT: Velociraptor agent requires a client configuration file."
+          - "You need to generate this from your Velociraptor server:"
+          - "1. Login to Velociraptor web UI: {{ velociraptor_server_url }}"
+          - "2. Go to Server Artifacts -> Server.Utils.CreateCollector"
+          - "3. Configure and download the client config"
+          - "4. Copy to {{ velociraptor_install_dir }}/client.config.yaml on each host"
+          - "5. Create systemd service to run: /usr/local/bin/velociraptor --config {{ velociraptor_install_dir }}/client.config.yaml client"
+      when: install_velociraptor and not velociraptor_exists.stat.exists
+      tags: [velociraptor]
+
+    # --- SECTION 3: WAZUH AGENT INSTALLATION ---
+    - name: Check if Wazuh agent already installed
+      ansible.builtin.stat:
+        path: /var/ossec/bin/wazuh-control
+      register: wazuh_exists
+      when: install_wazuh
+      tags: [wazuh]
+
+    - name: Add Wazuh GPG key
+      ansible.builtin.shell: |
+        curl -s https://packages.wazuh.com/key/GPG-KEY-WAZUH | gpg --no-default-keyring --keyring gnupg-ring:/usr/share/keyrings/wazuh.gpg --import && chmod 644 /usr/share/keyrings/wazuh.gpg
+      args:
+        creates: /usr/share/keyrings/wazuh.gpg
+      when: install_wazuh and not wazuh_exists.stat.exists
+      tags: [wazuh]
+
+    - name: Add Wazuh repository
+      ansible.builtin.shell: |
+        echo "deb [signed-by=/usr/share/keyrings/wazuh.gpg] https://packages.wazuh.com/4.x/apt/ stable main" | tee -a /etc/apt/sources.list.d/wazuh.list
+      args:
+        creates: /etc/apt/sources.list.d/wazuh.list
+      when: install_wazuh and not wazuh_exists.stat.exists
+      tags: [wazuh]
+
+    - name: Update apt cache after adding Wazuh repo
+      ansible.builtin.apt:
+        update_cache: yes
+      when: install_wazuh and not wazuh_exists.stat.exists
+      tags: [wazuh]
+
+    - name: Install Wazuh agent
+      ansible.builtin.apt:
+        name: wazuh-agent
+        state: present
+      environment:
+        WAZUH_MANAGER: "{{ wazuh_manager_ip }}"
+        WAZUH_AGENT_NAME: "{{ wazuh_agent_name }}"
+      when: install_wazuh and not wazuh_exists.stat.exists
+      tags: [wazuh]
+
+    - name: Configure Wazuh agent manager IP
+      ansible.builtin.lineinfile:
+        path: /var/ossec/etc/ossec.conf
+        regexp: '<address>.*</address>'
+        line: "    <address>{{ wazuh_manager_ip }}</address>"
+        backrefs: yes
+      when: install_wazuh
+      tags: [wazuh]
+
+    - name: Enable and start Wazuh agent service
+      ansible.builtin.service:
+        name: wazuh-agent
+        state: started
+        enabled: yes
+      when: install_wazuh
+      tags: [wazuh]
+
+    - name: Restart Wazuh agent to apply configuration
+      ansible.builtin.service:
+        name: wazuh-agent
+        state: restarted
+      when: install_wazuh
+      tags: [wazuh]
+
+    # --- SECTION 4: VERIFICATION ---
+    - name: Verify Wazuh agent status
+      ansible.builtin.command: /var/ossec/bin/wazuh-control status
+      register: wazuh_status
+      changed_when: false
+      failed_when: false
+      when: install_wazuh
+      tags: [wazuh, verify]
+
+    - name: Display Wazuh agent status
+      ansible.builtin.debug:
+        msg: "{{ wazuh_status.stdout_lines }}"
+      when: install_wazuh and wazuh_status.stdout_lines is defined
+      tags: [wazuh, verify]
+
+    - name: Display installation summary
+      ansible.builtin.debug:
+        msg:
+          - "=========================================="
+          - "Security Agent Installation Complete"
+          - "Host: {{ inventory_hostname }}"
+          - "=========================================="
+          - "Wazuh Agent: {{ 'Installed' if install_wazuh else 'Skipped' }}"
+          - "  Manager: {{ wazuh_manager_ip if install_wazuh else 'N/A' }}"
+          - "  Status: {{ wazuh_status.stdout if (install_wazuh and wazuh_status.stdout is defined) else 'N/A' }}"
+          - ""
+          - "Velociraptor Agent: {{ 'Binary Installed' if install_velociraptor else 'Skipped' }}"
+          - "  Server: {{ velociraptor_server_url if install_velociraptor else 'N/A' }}"
+          - "  Config: Manual setup required (see instructions above)"
+          - "=========================================="
+      tags: [verify]

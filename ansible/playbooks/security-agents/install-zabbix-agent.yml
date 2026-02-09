@@ -1,0 +1,64 @@
+---
+- name: Install Zabbix Agent on Multiple Hosts
+  hosts: wazuh-manager:target-host:win-workstation
+  become: yes
+  vars:
+    zabbix_server_ip: "10.0.1.30"
+    zabbix_agent_hostname: "{{ inventory_hostname }}"
+
+  tasks:
+    - name: Gather OS facts
+      ansible.builtin.setup:
+        gather_subset:
+          - distribution
+
+    # --- DEBIAN-BASED SYSTEMS ---
+    - name: Add Zabbix repository (Debian)
+      ansible.builtin.shell: |
+        curl -fsSL https://repo.zabbix.com/zabbix/7.0/debian/pool/main/z/zabbix-release/zabbix-release_latest_7.0+debian$(lsb_release -rs | cut -d. -f1)_all.deb -o /tmp/zabbix-release.deb
+        dpkg -i /tmp/zabbix-release.deb
+        apt update
+      args:
+        creates: /etc/apt/sources.list.d/zabbix.list
+      when: ansible_distribution == "Debian"
+
+    # --- UBUNTU-BASED SYSTEMS ---
+    - name: Add Zabbix repository (Ubuntu)
+      ansible.builtin.shell: |
+        curl -fsSL https://repo.zabbix.com/zabbix/7.0/ubuntu/pool/main/z/zabbix-release/zabbix-release_latest+ubuntu$(lsb_release -rs)_all.deb -o /tmp/zabbix-release.deb
+        dpkg -i /tmp/zabbix-release.deb
+        apt update
+      args:
+        creates: /etc/apt/sources.list.d/zabbix.list
+      when: ansible_distribution == "Ubuntu"
+
+    # --- COMMON INSTALLATION ---
+    - name: Install Zabbix agent2
+      ansible.builtin.apt:
+        name: zabbix-agent2
+        state: present
+        update_cache: yes
+
+    - name: Configure Zabbix server IP
+      ansible.builtin.lineinfile:
+        path: /etc/zabbix/zabbix_agent2.conf
+        regexp: '^Server='
+        line: "Server={{ zabbix_server_ip }}"
+        backrefs: no
+
+    - name: Configure Zabbix agent hostname
+      ansible.builtin.lineinfile:
+        path: /etc/zabbix/zabbix_agent2.conf
+        regexp: '^Hostname='
+        line: "Hostname={{ zabbix_agent_hostname }}"
+        backrefs: no
+
+    - name: Enable and start Zabbix agent service
+      ansible.builtin.systemd:
+        name: zabbix-agent2
+        state: restarted
+        enabled: yes
+
+    - name: Display success message
+      ansible.builtin.debug:
+        msg: "Zabbix agent installed on {{ inventory_hostname }} and configured to report to {{ zabbix_server_ip }}"

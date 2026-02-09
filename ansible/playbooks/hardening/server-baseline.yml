@@ -1,0 +1,197 @@
+---
+# =============================================================================
+# Server Baseline - Applied to all new servers before role-specific hardening
+# =============================================================================
+# Applies foundational security settings:
+#   - System updates
+#   - Essential packages
+#   - Timezone and locale
+#   - SSH hardening (key-only, no root)
+#   - Firewall baseline (UFW)
+#   - NTP configuration
+#   - Disable unused services
+#
+# Usage:
+#   ansible-playbook playbooks/hardening/server-baseline.yml
+#   ansible-playbook playbooks/hardening/server-baseline.yml --limit wazuh-manager
+# =============================================================================
+
+- name: Apply Server Baseline Security Configuration
+  hosts: all
+  become: yes
+  gather_facts: yes
+
+  vars:
+    ssh_port: 22
+    ntp_servers:
+      - 0.pool.ntp.org
+      - 1.pool.ntp.org
+    timezone: "America/Chicago"
+    allowed_ssh_users: "deploy-svc"
+
+  tasks:
+    # ====================================
+    # SYSTEM UPDATES
+    # ====================================
+    - name: Update apt cache
+      ansible.builtin.apt:
+        update_cache: yes
+        cache_valid_time: 3600
+      when: ansible_os_family == "Debian"
+      tags: [updates]
+
+    - name: Upgrade all packages
+      ansible.builtin.apt:
+        upgrade: safe
+      when: ansible_os_family == "Debian"
+      tags: [updates]
+
+    # ====================================
+    # ESSENTIAL PACKAGES
+    # ====================================
+    - name: Install baseline packages
+      ansible.builtin.apt:
+        name:
+          - ufw
+          - fail2ban
+          - unattended-upgrades
+          - apt-listchanges
+          - logrotate
+          - rsyslog
+          - curl
+          - wget
+          - htop
+          - net-tools
+          - lsof
+          - auditd
+          - audispd-plugins
+        state: present
+      when: ansible_os_family == "Debian"
+      tags: [packages]
+
+    # ====================================
+    # TIMEZONE & LOCALE
+    # ====================================
+    - name: Set timezone
+      community.general.timezone:
+        name: "{{ timezone }}"
+      tags: [system]
+
+    # ====================================
+    # SSH HARDENING
+    # ====================================
+    - name: Disable root SSH login
+      ansible.builtin.lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^#?PermitRootLogin'
+        line: 'PermitRootLogin no'
+      notify: restart sshd
+      tags: [ssh]
+
+    - name: Disable password authentication
+      ansible.builtin.lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^#?PasswordAuthentication'
+        line: 'PasswordAuthentication no'
+      notify: restart sshd
+      tags: [ssh]
+
+    - name: Disable empty passwords
+      ansible.builtin.lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^#?PermitEmptyPasswords'
+        line: 'PermitEmptyPasswords no'
+      notify: restart sshd
+      tags: [ssh]
+
+    - name: Set SSH MaxAuthTries
+      ansible.builtin.lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^#?MaxAuthTries'
+        line: 'MaxAuthTries 3'
+      notify: restart sshd
+      tags: [ssh]
+
+    - name: Restrict SSH to allowed users
+      ansible.builtin.lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^#?AllowUsers'
+        line: "AllowUsers {{ allowed_ssh_users }}"
+      notify: restart sshd
+      tags: [ssh]
+
+    # ====================================
+    # FIREWALL (UFW)
+    # ====================================
+    - name: Set UFW default deny incoming
+      community.general.ufw:
+        direction: incoming
+        default: deny
+      tags: [firewall]
+
+    - name: Set UFW default allow outgoing
+      community.general.ufw:
+        direction: outgoing
+        default: allow
+      tags: [firewall]
+
+    - name: Allow SSH through UFW
+      community.general.ufw:
+        rule: allow
+        port: "{{ ssh_port }}"
+        proto: tcp
+      tags: [firewall]
+
+    - name: Enable UFW
+      community.general.ufw:
+        state: enabled
+      tags: [firewall]
+
+    # ====================================
+    # DISABLE UNUSED SERVICES
+    # ====================================
+    - name: Disable unnecessary services
+      ansible.builtin.systemd:
+        name: "{{ item }}"
+        state: stopped
+        enabled: no
+      loop:
+        - avahi-daemon
+        - cups
+        - rpcbind
+      failed_when: false
+      tags: [services]
+
+    # ====================================
+    # ENABLE SECURITY SERVICES
+    # ====================================
+    - name: Enable and start auditd
+      ansible.builtin.systemd:
+        name: auditd
+        state: started
+        enabled: yes
+      tags: [audit]
+
+    - name: Enable and start fail2ban
+      ansible.builtin.systemd:
+        name: fail2ban
+        state: started
+        enabled: yes
+      tags: [security]
+
+    - name: Enable unattended-upgrades
+      ansible.builtin.copy:
+        dest: /etc/apt/apt.conf.d/20auto-upgrades
+        content: |
+          APT::Periodic::Update-Package-Lists "1";
+          APT::Periodic::Unattended-Upgrade "1";
+          APT::Periodic::AutocleanInterval "7";
+        mode: '0644'
+      when: ansible_os_family == "Debian"
+      tags: [updates]
+
+  handlers:
+    - name: restart sshd
+      ansible.builtin.systemd:
+        name: sshd
+        state: restarted

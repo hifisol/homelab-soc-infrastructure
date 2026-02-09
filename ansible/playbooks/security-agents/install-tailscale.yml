@@ -1,0 +1,61 @@
+---
+- name: Install Tailscale
+  hosts: target-host
+  become: yes
+
+  tasks:
+    # --- SECTION 1: SYSTEM PREP ---
+    - name: Update apt cache
+      ansible.builtin.apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Install required dependencies
+      ansible.builtin.apt:
+        name:
+          - curl
+          - apt-transport-https
+          - lsb-release
+          - gnupg
+        state: present
+
+    # --- SECTION 2: TAILSCALE INSTALLATION ---
+    - name: Add Tailscale GPG key
+      ansible.builtin.shell: |
+        mkdir -p --mode=0755 /usr/share/keyrings
+        curl -fsSL https://pkgs.tailscale.com/stable/ubuntu/$(lsb_release -cs).noarmor.gpg | tee /usr/share/keyrings/tailscale-archive-keyring.gpg >/dev/null
+      args:
+        creates: /usr/share/keyrings/tailscale-archive-keyring.gpg
+
+    - name: Add Tailscale repository
+      ansible.builtin.shell: |
+        curl -fsSL https://pkgs.tailscale.com/stable/ubuntu/$(lsb_release -cs).tailscale-keyring.list | tee /etc/apt/sources.list.d/tailscale.list
+      args:
+        creates: /etc/apt/sources.list.d/tailscale.list
+
+    - name: Update apt cache after adding Tailscale repo
+      ansible.builtin.apt:
+        update_cache: yes
+
+    - name: Install Tailscale
+      ansible.builtin.apt:
+        name: tailscale
+        state: present
+
+    - name: Enable Tailscale service
+      ansible.builtin.service:
+        name: tailscaled
+        state: started
+        enabled: yes
+
+    # --- SECTION 3: POST-INSTALL INSTRUCTIONS ---
+    - name: Display Tailscale setup instructions
+      ansible.builtin.debug:
+        msg:
+          - "Tailscale has been installed successfully!"
+          - "Next steps:"
+          - "1. SSH into the server: ssh deploy-svc@{{ ansible_host }}"
+          - "2. Connect to your Tailscale network: sudo tailscale up"
+          - "3. Follow the authentication URL to approve this device"
+          - "4. Check status: sudo tailscale status"
+          - "5. Get Tailscale IP: sudo tailscale ip -4"

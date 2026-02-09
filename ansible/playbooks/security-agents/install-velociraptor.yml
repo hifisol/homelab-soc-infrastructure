@@ -1,0 +1,127 @@
+---
+- name: Install Velociraptor DFIR Server (Docker) on target-host
+  hosts: target-host
+  become: yes
+  vars:
+    velociraptor_install_dir: "/opt/velociraptor"
+    velociraptor_version: "v0.75.3"
+
+  tasks:
+    # --- SECTION 1: SYSTEM PREP & DOCKER ---
+    - name: Update apt cache
+      ansible.builtin.apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Install required dependencies
+      ansible.builtin.apt:
+        name:
+          - curl
+          - gnupg
+          - lsb-release
+          - python3-pip
+          - python3-docker
+        state: present
+
+    - name: Add Docker GPG key
+      ansible.builtin.shell: |
+        mkdir -p /etc/apt/keyrings
+        curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg --yes
+      args:
+        creates: /etc/apt/keyrings/docker.gpg
+
+    - name: Add Docker repository
+      ansible.builtin.shell: |
+        echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
+      args:
+        creates: /etc/apt/sources.list.d/docker.list
+
+    - name: Install Docker Engine
+      ansible.builtin.apt:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+          - docker-compose-plugin
+        state: present
+        update_cache: yes
+
+    - name: Ensure Docker service is running
+      ansible.builtin.service:
+        name: docker
+        state: started
+        enabled: yes
+
+    # --- SECTION 2: SETUP VELOCIRAPTOR DIRECTORIES ---
+    - name: Create Velociraptor base directory
+      ansible.builtin.file:
+        path: "{{ velociraptor_install_dir }}"
+        state: directory
+        mode: '0755'
+
+    - name: Create Velociraptor subdirectories
+      ansible.builtin.file:
+        path: "{{ velociraptor_install_dir }}/{{ item }}"
+        state: directory
+        mode: '0755'
+      loop:
+        - config
+        - data
+        - logs
+
+    # --- SECTION 3: COPY DOCKERFILE AND COMPOSE ---
+    - name: Copy Velociraptor Dockerfile
+      ansible.builtin.template:
+        src: ../templates/velociraptor-dockerfile
+        dest: "{{ velociraptor_install_dir }}/Dockerfile"
+
+    - name: Copy Velociraptor Compose template
+      ansible.builtin.template:
+        src: ../templates/velociraptor-compose.yml
+        dest: "{{ velociraptor_install_dir }}/docker-compose.yml"
+
+    # --- SECTION 4: BUILD AND GENERATE CONFIG ---
+    - name: Build Velociraptor Docker image
+      community.docker.docker_image:
+        name: "velociraptor-custom"
+        tag: "{{ velociraptor_version }}"
+        build:
+          path: "{{ velociraptor_install_dir }}"
+          args:
+            VELOCIRAPTOR_VERSION: "{{ velociraptor_version }}"
+        source: build
+        state: present
+        force_source: yes
+
+    - name: Check if config already exists
+      ansible.builtin.stat:
+        path: "{{ velociraptor_install_dir }}/config/server.config.yaml"
+      register: config_exists
+
+    - name: Generate initial Velociraptor config using our custom image
+      ansible.builtin.shell: |
+        docker run --rm \
+          velociraptor-custom:{{ velociraptor_version }} \
+          config generate > {{ velociraptor_install_dir }}/config/server.config.yaml
+      args:
+        creates: "{{ velociraptor_install_dir }}/config/server.config.yaml"
+      when: not config_exists.stat.exists
+
+    # --- SECTION 5: DEPLOY DOCKER COMPOSE ---
+    - name: Deploy Velociraptor Stack (Docker Compose)
+      community.docker.docker_compose_v2:
+        project_src: "{{ velociraptor_install_dir }}"
+        state: present
+        build: always
+
+    # --- SECTION 6: DISPLAY NEXT STEPS ---
+    - name: Display post-installation instructions
+      ansible.builtin.debug:
+        msg:
+          - "Velociraptor has been deployed via Docker!"
+          - "Next steps:"
+          - "1. Review config: {{ velociraptor_install_dir }}/config/server.config.yaml"
+          - "2. Restart if needed: cd {{ velociraptor_install_dir }} && docker compose restart"
+          - "3. View logs: docker logs velociraptor-server"
+          - "4. Access web GUI: https://{{ ansible_host }}:8000"
+          - "5. Create admin user: docker exec velociraptor-server /velociraptor user add <username> --role administrator --config /config/server.config.yaml"

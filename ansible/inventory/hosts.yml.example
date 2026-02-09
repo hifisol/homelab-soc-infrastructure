@@ -1,0 +1,64 @@
+---
+# Example inventory - customize for your environment
+all:
+  vars:
+    ansible_user: deploy-svc
+    ansible_ssh_private_key_file: ~/.ssh/deploy-svc
+    ansible_become: yes
+    ansible_become_method: sudo
+
+  children:
+    # --- Proxmox Hypervisors ---
+    proxmox:
+      hosts:
+        proxmox-host:
+          ansible_host: 10.0.2.11
+
+    # --- Security Stack ---
+    security:
+      children:
+        wazuh:
+          hosts:
+            wazuh-manager:
+              ansible_host: 10.0.1.10
+        threat_hunting:
+          hosts:
+            threat-hunter:
+              ansible_host: 10.0.1.20
+        vulnerability_scanning:
+          hosts:
+            threat-hunter:
+
+    # --- Docker Hosts ---
+    docker_hosts:
+      hosts:
+        docker-host:
+          ansible_host: 10.0.1.30
+
+    # --- Workstations ---
+    workstations:
+      hosts:
+        workstation:
+          ansible_host: 10.0.3.10
+
+    # --- Monitoring Agents (all Linux hosts) ---
+    monitoring:
+      children:
+        security:
+        docker_hosts:
+        workstations:
+
+    # --- AD Lab Targets (deployed dynamically) ---
+    ad_lab:
+      vars:
+        ansible_user: labadmin
+        lab_domain: lab.local
+      hosts:
+        ad-dc-01:
+          ansible_host: 10.0.10.10
+        kali-01:
+          ansible_host: 10.0.10.20
+        commando-01:
+          ansible_host: 10.0.10.30
+        ubuntu-ad-01:
+          ansible_host: 10.0.10.60
