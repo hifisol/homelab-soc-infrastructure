@@ -1,0 +1,27 @@
+FROM debian:bookworm-slim
+
+# Install dependencies
+RUN apt-get update && apt-get install -y \
+    ca-certificates \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set Velociraptor version
+ARG VELOCIRAPTOR_VERSION=v0.75.3
+
+# Download Velociraptor binary
+# Note: v0.75.x uses tag "v0.75" for download URLs
+RUN DOWNLOAD_TAG=$(echo ${VELOCIRAPTOR_VERSION} | cut -d. -f1-2) && \
+    curl -L -o /usr/local/bin/velociraptor \
+    "https://github.com/Velocidex/velociraptor/releases/download/${DOWNLOAD_TAG}/velociraptor-${VELOCIRAPTOR_VERSION}-linux-amd64" \
+    && chmod +x /usr/local/bin/velociraptor
+
+# Create directories
+RUN mkdir -p /config /data /logs
+
+WORKDIR /data
+
+EXPOSE 8000 8001 8889
+
+ENTRYPOINT ["/usr/local/bin/velociraptor"]
+CMD ["--help"]
