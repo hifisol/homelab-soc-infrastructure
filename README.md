@@ -28,14 +28,14 @@ Production Homelab SOC (Security Operations Center) — threat detection, endpoi
               │             │  (All Endpoints) │            │
               │             └──────────────────┘            │
               │                                             │
-    ┌─────────▼────────┐                         ┌──────────▼───────┐
-    │  Proxmox VE      │ ◄──── 20Gbps Bond ────► │  TrueNAS SCALE   │
-    │                  │       (2x 10G DAC)      │                  │
-    │ • AD Lab VMs     │                         │ • ISO Library    │
-    │ • VM Templates   │                         │ • Velociraptor   │
-    │ • ISO Storage    │                         │ • Wazuh Agent    │
-    │                  │                         │ • Tailscale      │
-    └──────────────────┘                         └──────────────────┘
+    ┌─────────▼────────┐                           ┌────────▼─────────┐
+    │  Proxmox VE      │  ◄──── 20Gbps Bond ────►  │  TrueNAS SCALE   │
+    │                  │       (2x 10G DAC)        │                  │
+    │ • AD Lab VMs     │                           │ • ISO Library    │
+    │ • VM Templates   │                           │ • Velociraptor   │
+    │ • ISO Storage    │                           │ • Wazuh Agent    │
+    │                  │                           │ • Tailscale      │
+    └──────────────────┘                           └──────────────────┘
 ```
 
 ## Repository Structure
