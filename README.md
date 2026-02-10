@@ -11,9 +11,9 @@ Production Homelab SOC (Security Operations Center) — threat detection, endpoi
                      │    Syslog → Wazuh (5514/UDP)    │
                      └────────────────┬────────────────┘
                                       │
-              ┌──────────────────────┬┴┬───────────────────────┐
-              │                      │ │                       │
-    ┌─────────▼────────┐   ┌─────────▼─▼───────┐   ┌───────────▼───────┐
+              ┌──────────────────────┬┴┬─────────────────────┐
+              │                      │ │                     │
+    ┌─────────▼────────┐   ┌─────────▼─▼───────┐   ┌─────────▼─────────┐
     │  Threat Hunter   │   │   Wazuh Manager   │   │   Docker Host     │
     │                  │   │                   │   │                   │
     │ • Zeek (NSM)     │   │ • Wazuh Manager   │   │ • Netbox (DCIM)   │
