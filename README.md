@@ -11,31 +11,31 @@ Production Homelab SOC (Security Operations Center) — threat detection, endpoi
                            │    Syslog → Wazuh (5514/UDP)    │
                            └──────────┬──────────────────────┘
                                       │
-              ┌───────────────────────┬┴┬───────────────────────┐
-              │                       │ │                       │
-    ┌─────────▼────────┐   ┌─────────▼─▼───────┐   ┌──────────▼────────┐
+              ┌──────────────────────┬┴┬───────────────────────┐
+              │                      │ │                       │
+    ┌─────────▼────────┐   ┌─────────▼─▼───────┐   ┌───────────▼───────┐
     │  Threat Hunter   │   │   Wazuh Manager   │   │   Docker Host     │
-    │                  │   │                    │   │                   │
-    │ • Zeek (NSM)     │   │ • Wazuh Manager    │   │ • Netbox (DCIM)   │
-    │ • RITA (Beacons) │   │ • Wazuh Indexer    │   │ • Zabbix          │
-    │ • AC-Hunter      │   │ • Wazuh Dashboard  │   │ • Portainer       │
-    │ • GVM/OpenVAS    │   │ • Discord Alerts   │   │ • Samba           │
-    │ • Velociraptor   │   │ • Syslog-ng        │   │                   │
-    └──────────────────┘   └────────────────────┘   └───────────────────┘
+    │                  │   │                   │   │                   │
+    │ • Zeek (NSM)     │   │ • Wazuh Manager   │   │ • Netbox (DCIM)   │
+    │ • RITA (Beacons) │   │ • Wazuh Indexer   │   │ • Zabbix          │
+    │ • AC-Hunter      │   │ • Wazuh Dashboard │   │ • Portainer       │
+    │ • GVM/OpenVAS    │   │ • Discord Alerts  │   │ • Samba           │
+    │ • Velociraptor   │   │ • Syslog-ng       │   │                   │
+    └──────────────────┘   └───────────────────┘   └───────────────────┘
               │                       │                       │
-              │              ┌────────▼────────┐              │
-              │              │  Wazuh Agents   │              │
-              │              │  (All Endpoints) │              │
-              │              └─────────────────┘              │
+              │              ┌────────▼─────────┐             │
+              │              │   Wazuh Agents   │             │
+              │              │  (All Endpoints) │             │
+              │              └──────────────────┘             │
               │                                               │
-    ┌─────────▼────────┐                          ┌───────────▼──────┐
-    │  Proxmox VE      │◄── 20Gbps Bond ────────►│  TrueNAS SCALE   │
-    │                   │   (2x 10G DAC)          │                  │
-    │ • AD Lab VMs      │                          │ • ISO Library    │
-    │ • VM Templates    │                          │ • Velociraptor   │
-    │ • ISO Storage     │                          │ • Wazuh Agent    │
-    │                   │                          │ • Tailscale      │
-    └───────────────────┘                          └──────────────────┘
+    ┌─────────▼────────┐                         ┌────────────▼─────┐
+    │  Proxmox VE      │ ◄──── 20Gbps Bond ────► │  TrueNAS SCALE   │
+    │                  │   (2x 10G DAC)          │                  │
+    │ • AD Lab VMs     │                         │ • ISO Library    │
+    │ • VM Templates   │                         │ • Velociraptor   │
+    │ • ISO Storage    │                         │ • Wazuh Agent    │
+    │                  │                         │ • Tailscale      │
+    └──────────────────┘                         └──────────────────┘
 ```
 
 ## Repository Structure
