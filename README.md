@@ -59,11 +59,11 @@ homelab-soc-infrastructure/
 │   ├── decoders/
 │   │   └── zeek_decoders.xml            # Zeek TSV log parsing (8 log types)
 │   ├── integrations/
-│   │   ├── custom-discord-rita           # RITA alerts → Discord webhook
+│   │   ├── custom-discord-rita          # RITA alerts → Discord webhook
 │   │   └── custom-discord-wazuh         # Wazuh alerts → Discord webhook
 │   └── scripts/
-│       ├── rita-wazuh-export.sh          # RITA → Wazuh JSON bridge (hourly)
-│       └── rita-daily-report.sh          # Daily RITA summary → Discord
+│       ├── rita-wazuh-export.sh         # RITA → Wazuh JSON bridge (hourly)
+│       └── rita-daily-report.sh         # Daily RITA summary → Discord
 ├── docker/                              # Docker compositions
 │   ├── velociraptor-compose.yml         # Velociraptor DFIR server
 │   ├── velociraptor-dockerfile          # Custom container build
