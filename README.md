@@ -22,13 +22,13 @@ Production Homelab SOC (Security Operations Center) — threat detection, endpoi
     │ • GVM/OpenVAS    │   │ • Discord Alerts  │   │ • Samba           │
     │ • Velociraptor   │   │ • Syslog-ng       │   │                   │
     └──────────────────┘   └───────────────────┘   └───────────────────┘
-              │                       │                      │
-              │             ┌─────────▼────────┐             │
-              │             │   Wazuh Agents   │             │
-              │             │  (All Endpoints) │             │
-              │             └──────────────────┘             │
-              │                                              │
-    ┌─────────▼────────┐                         ┌───────────▼──────┐
+              │                       │                     │
+              │             ┌─────────▼────────┐            │
+              │             │   Wazuh Agents   │            │
+              │             │  (All Endpoints) │            │
+              │             └──────────────────┘            │
+              │                                             │
+    ┌─────────▼────────┐                         ┌──────────▼───────┐
     │  Proxmox VE      │ ◄──── 20Gbps Bond ────► │  TrueNAS SCALE   │
     │                  │       (2x 10G DAC)      │                  │
     │ • AD Lab VMs     │                         │ • ISO Library    │
