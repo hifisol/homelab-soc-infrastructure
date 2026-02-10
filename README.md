@@ -1,6 +1,6 @@
 # Homelab SOC Infrastructure
 
-Production homelab SOC (Security Operations Center) — threat detection, endpoint visibility, vulnerability management, network monitoring, and automated infrastructure deployment. Runs across bare-metal servers, TrueNAS SCALE, and Proxmox VE.
+Production Homelab SOC (Security Operations Center) — threat detection, endpoint visibility, vulnerability management, network monitoring, and automated infrastructure deployment. Runs across bare-metal servers, TrueNAS SCALE, and Proxmox VE.
 
 ## Architecture
 
