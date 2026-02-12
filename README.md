@@ -100,7 +100,7 @@ Custom Wazuh detection rules, Zeek network monitoring decoders, RITA beacon anal
 
 ```
 UDM Pro ──syslog──► Wazuh Manager ──► Discord (#wazuh-alerts)
-                         ▲
+                             ▲
 Zeek ──logs──► Wazuh Agent ──┘
                          ▲
 RITA ──JSON──► Wazuh ────┘──────────► Discord (#rita-alerts)
