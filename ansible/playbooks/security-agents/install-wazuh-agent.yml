@@ -3,7 +3,7 @@
   hosts: Raiders
   become: yes
   vars:
-    wazuh_manager_ip: "10.0.1.10"
+    wazuh_manager_ip: "{{ wazuh_manager | default('YOUR_WAZUH_MANAGER_IP') }}"
     wazuh_agent_name: "{{ inventory_hostname }}"
 
   tasks:

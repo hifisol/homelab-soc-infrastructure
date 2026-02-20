@@ -5,17 +5,19 @@
 # Schedule via cron: 30 * * * * /opt/rita-wazuh-export.sh
 
 LOG_FILE="/var/log/rita/alerts.log"
-DB="localhost-rolling"
+DB="${RITA_DB:-localhost-rolling}"
 TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
 # Minimum beacon score to alert (0.92 = 92% confidence)
 MIN_BEACON_SCORE=0.92
 
 # Safelist for beacons (cloud services that naturally beacon)
-BEACON_SAFELIST="199.38.181|157.180|142.251|23.142|54.92|52.123|74.125|142.250|172.217|216.239|199.232|3.33|34.36|52.85|44.239|155.133|185.25|162.247|13.249|52.50"
+# Add IP prefixes to safelist (pipe-delimited regex). Example: "142.251|74.125|172.217"
+BEACON_SAFELIST="${BEACON_SAFELIST:-}"
 
 # Safelist for long connections (Tailscale, cloud services, etc.)
-LONG_CONN_SAFELIST="155.133|192.178|44.212|44.239|192.200.0|162.248.221|199.165.136|161.38.184|172.183|20\.[0-9]|142.250|172.217|13.107|52.123|72.153"
+# Example: "142.250|172.217|13.107"
+LONG_CONN_SAFELIST="${LONG_CONN_SAFELIST:-}"
 
 # Function to log JSON alert
 log_alert() {
@@ -32,7 +34,7 @@ log_alert() {
 rita show-beacons "$DB" 2>/dev/null | tail -n +2 | while IFS=, read -r score src dst conns avgbytes totalbytes tsscore dsscore durscore histscore topint; do
     if [[ -n "$score" && "$score" != "Score" ]]; then
         # Skip if destination is safelisted
-        if echo "$dst" | grep -qE "$BEACON_SAFELIST"; then
+        if [[ -n "$BEACON_SAFELIST" ]] && echo "$dst" | grep -qE "$BEACON_SAFELIST"; then
             continue
         fi
         # Compare score using bc for floating point
@@ -47,7 +49,7 @@ rita show-long-connections "$DB" 2>/dev/null | tail -n +2 | head -20 | while IFS
     if [[ -n "$src" && "$src" != "Source IP" ]]; then
         dur_int=${duration%.*}
         # Skip if destination is safelisted
-        if echo "$dst" | grep -qE "$LONG_CONN_SAFELIST"; then
+        if [[ -n "$LONG_CONN_SAFELIST" ]] && echo "$dst" | grep -qE "$LONG_CONN_SAFELIST"; then
             continue
         fi
         if [[ "$dur_int" -gt 3600 ]]; then

@@ -4,12 +4,12 @@
   become: yes
   vars:
     # Velociraptor Configuration
-    velociraptor_server_url: "https://10.0.1.20:8000"  # Change to your Velociraptor server
+    velociraptor_server_url: "{{ velociraptor_server | default('https://YOUR_VELOCIRAPTOR_SERVER:8000') }}"
     velociraptor_config_url: ""  # Optional: URL to download client config
     velociraptor_install_dir: "/opt/velociraptor"
 
     # Wazuh Configuration
-    wazuh_manager_ip: "10.0.1.10"
+    wazuh_manager_ip: "{{ wazuh_manager | default('YOUR_WAZUH_MANAGER_IP') }}"
     wazuh_agent_name: "{{ inventory_hostname }}"
 
     # Control flags - set to 'no' to skip installation

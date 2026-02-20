@@ -4,7 +4,7 @@
 # Schedule via cron: 0 6 * * * /opt/rita-daily-report.sh
 
 REPORT_DIR="/var/log/rita/reports"
-DB="localhost-rolling"
+DB="${RITA_DB:-localhost-rolling}"
 DATE=$(date +"%Y-%m-%d")
 TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 DISCORD_WEBHOOK="https://discord.com/api/webhooks/YOUR_WEBHOOK_ID/YOUR_WEBHOOK_TOKEN"

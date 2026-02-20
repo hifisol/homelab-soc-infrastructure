@@ -3,7 +3,7 @@
   hosts: wazuh-manager:target-host:win-workstation
   become: yes
   vars:
-    zabbix_server_ip: "10.0.1.30"
+    zabbix_server_ip: "{{ zabbix_server | default('YOUR_ZABBIX_SERVER_IP') }}"
     zabbix_agent_hostname: "{{ inventory_hostname }}"
 
   tasks:

@@ -137,13 +137,13 @@ EOF
 # ============================================================
 # Add your hosts here
 # ============================================================
-# gather_host_info "hostname" "10.0.1.10" "deploy-svc" "~/.ssh/id_ed25519"
-# gather_host_info "hostname" "10.0.1.20" "deploy-svc" "~/.ssh/id_ed25519"
+# gather_host_info "hostname" "192.168.1.10" "deploy-svc" "~/.ssh/id_ed25519"
+# gather_host_info "hostname" "192.168.1.20" "deploy-svc" "~/.ssh/id_ed25519"
 
 echo ""
 echo "NOTE: Edit this script to add your infrastructure hosts."
 echo "Example:"
-echo '  gather_host_info "wazuh-mgr" "10.0.1.10" "deploy-svc" "~/.ssh/id_ed25519"'
+echo '  gather_host_info "wazuh-mgr" "192.168.1.10" "deploy-svc" "~/.ssh/id_ed25519"'
 
 # Close JSON array
 echo "" >> "$OUTPUT_FILE"
