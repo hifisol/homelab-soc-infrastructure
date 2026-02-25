@@ -93,6 +93,7 @@ Custom Wazuh detection rules, Zeek network monitoring decoders, RITA beacon anal
 | Windows FP Suppression | 100001-100015 | Tuned whitelist rules reducing false positives |
 | UniFi/UDM Network | 100100-100122 | Firewall blocks, IDS/IPS, Tor, threat management |
 | WiFi Attack Detection | 100130-100135 | Deauth floods, evil twin, PMKID, beacon anomalies |
+| DeepBlueCLI | 100150-100157 | Windows event log hunting — password spray, mimikatz, obfuscated PS, log clearing |
 | RITA Beacons | 100200-100270 | C2 beacon scoring, blacklist contacts, long connections |
 | Zeek Network | 100300-100499 | Suspicious ports, DNS threats, HTTP anomalies, SSL issues, SSH brute force |
 
@@ -104,6 +105,9 @@ UDM Pro ──syslog──► Wazuh Manager ──► Discord (#wazuh-alerts)
 Zeek ──logs──► Wazuh Agent ──┘
                          ▲
 RITA ──JSON──► Wazuh ────┘──────────► Discord (#rita-alerts)
+                         ▲
+DeepBlueCLI ──log──► Wazuh Agent (Windows) ──► Wazuh Manager
+  (Scheduled Task, every 15 min — Security + System log analysis)
 ```
 
 ### Zeek Log Coverage
@@ -204,6 +208,7 @@ TrueNAS SCALE overwrites the root filesystem on updates (A/B boot). Post-init sc
 | **SIEM** | Wazuh |
 | **NSM** | Zeek |
 | **DFIR** | Velociraptor |
+| **Windows Event Log Hunting** | DeepBlueCLI (SANS) |
 | **Beacon Detection** | RITA, AC-Hunter |
 | **Vuln Scanning** | GVM/OpenVAS |
 | **Monitoring** | Zabbix |
