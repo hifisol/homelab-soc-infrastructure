@@ -20,7 +20,7 @@ Production Homelab SOC (Security Operations Center) — threat detection, endpoi
     │ • RITA (Beacons) │   │ • Wazuh Indexer   │   │ • Netbox (DCIM)   │
     │ • AC-Hunter      │   │ • Wazuh Dashboard │   │ • Zabbix          │
     │ • GVM/OpenVAS    │   │ • Discord Alerts  │   │ • Portainer       │
-    │ • Velociraptor   │   │ • MISP + VT       │   │ • Samba           │
+    │ • Velociraptor   │   │ • MISP + VT       │   │                   │
     │                  │   │ • Syslog-ng       │   │                   │
     └──────────────────┘   └───────────────────┘   └───────────────────┘
               │                       │                     │
