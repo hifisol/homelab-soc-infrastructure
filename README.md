@@ -245,6 +245,22 @@ TrueNAS SCALE overwrites the root filesystem on updates (A/B boot). Post-init sc
 
 ---
 
+## Platform
+
+All Linux hosts and LXC containers run **Debian 12 (Bookworm)** — chosen for stability, long-term security support, and validated compatibility with Wazuh, MISP, Shuffle, and Docker.
+
+| Host Role | OS |
+|-----------|-----|
+| Wazuh Manager | Debian 12 |
+| Threat Hunter (Zeek/RITA) | Debian 12 |
+| Docker Host (Shuffle/Netbox/Zabbix) | Debian 12 |
+| LXC Containers (CyberChef, MISP, Artemis, DomainIntel) | Debian 12 |
+| Hypervisor | Proxmox VE (Debian 12 base) |
+| Storage | TrueNAS SCALE (Debian 12 base) |
+| AD Lab | Windows Server 2022 / Windows 10 |
+
+---
+
 ## Technologies
 
 | Category | Tools |
@@ -263,6 +279,7 @@ TrueNAS SCALE overwrites the root filesystem on updates (A/B boot). Post-init sc
 | **VPN** | Tailscale |
 | **Hypervisor** | Proxmox VE |
 | **Storage** | TrueNAS SCALE (ZFS) |
+| **OS** | Debian 12 (Bookworm) |
 | **Networking** | Ubiquiti UniFi (UDM Pro SE) |
 | **Containers** | Docker, LXC |
 | **Automation** | Ansible |
