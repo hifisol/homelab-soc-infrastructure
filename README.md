@@ -35,7 +35,7 @@ Production Homelab SOC (Security Operations Center) — threat detection, endpoi
     │ • AD Lab VMs     │                           │ • ISO Library    │
     │ • CyberChef LXC  │                           │ • Velociraptor   │
     │ • MISP LXC       │                           │ • Wazuh Agent    │
-    │ • VM Templates   │                           │ • Tailscale      │
+    │ • VM Templates   │                           │                  │
     └──────────────────┘                           └──────────────────┘
 ```
 
