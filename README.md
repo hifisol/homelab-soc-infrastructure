@@ -16,11 +16,12 @@ Production Homelab SOC (Security Operations Center) — threat detection, endpoi
     ┌─────────▼────────┐   ┌─────────▼─▼───────┐   ┌─────────▼─────────┐
     │  Threat Hunter   │   │   Wazuh Manager   │   │   Docker Host     │
     │                  │   │                   │   │                   │
-    │ • Zeek (NSM)     │   │ • Wazuh Manager   │   │ • Netbox (DCIM)   │
-    │ • RITA (Beacons) │   │ • Wazuh Indexer   │   │ • Zabbix          │
-    │ • AC-Hunter      │   │ • Wazuh Dashboard │   │ • Portainer       │
-    │ • GVM/OpenVAS    │   │ • Discord Alerts  │   │ • Samba           │
-    │ • Velociraptor   │   │ • Syslog-ng       │   │                   │
+    │ • Zeek (NSM)     │   │ • Wazuh Manager   │   │ • Shuffle SOAR    │
+    │ • RITA (Beacons) │   │ • Wazuh Indexer   │   │ • Netbox (DCIM)   │
+    │ • AC-Hunter      │   │ • Wazuh Dashboard │   │ • Zabbix          │
+    │ • GVM/OpenVAS    │   │ • Discord Alerts  │   │ • Portainer       │
+    │ • Velociraptor   │   │ • MISP + VT       │   │ • Samba           │
+    │                  │   │ • Syslog-ng       │   │                   │
     └──────────────────┘   └───────────────────┘   └───────────────────┘
               │                       │                     │
               │             ┌─────────▼────────┐            │
@@ -32,9 +33,9 @@ Production Homelab SOC (Security Operations Center) — threat detection, endpoi
     │  Proxmox VE      │  ◄──── 20Gbps Bond ────►  │  TrueNAS SCALE   │
     │                  │       (2x 10G DAC)        │                  │
     │ • AD Lab VMs     │                           │ • ISO Library    │
-    │ • VM Templates   │                           │ • Velociraptor   │
-    │ • ISO Storage    │                           │ • Wazuh Agent    │
-    │                  │                           │ • Tailscale      │
+    │ • CyberChef LXC  │                           │ • Velociraptor   │
+    │ • MISP LXC       │                           │ • Wazuh Agent    │
+    │ • VM Templates   │                           │ • Tailscale      │
     └──────────────────┘                           └──────────────────┘
 ```
 
@@ -60,13 +61,18 @@ homelab-soc-infrastructure/
 │   │   └── zeek_decoders.xml            # Zeek TSV log parsing (8 log types)
 │   ├── integrations/
 │   │   ├── custom-discord-rita          # RITA alerts → Discord webhook
-│   │   └── custom-discord-wazuh         # Wazuh alerts → Discord webhook
+│   │   ├── custom-discord-wazuh         # Wazuh alerts → Discord webhook
+│   │   ├── custom-shuffle               # Wazuh alerts → Shuffle SOAR
+│   │   └── custom-misp                  # Wazuh alerts → MISP IOC lookup
 │   └── scripts/
 │       ├── rita-wazuh-export.sh         # RITA → Wazuh JSON bridge (hourly)
 │       └── rita-daily-report.sh         # Daily RITA summary → Discord
 ├── docker/                              # Docker compositions
 │   ├── velociraptor-compose.yml         # Velociraptor DFIR server
 │   ├── velociraptor-dockerfile          # Custom container build
+│   ├── shuffle-compose.yml              # Shuffle SOAR (backend, frontend, orborus)
+│   ├── misp-compose.yml                 # MISP threat intel (core, modules, DB, Redis)
+│   ├── cyberchef-compose.yml            # CyberChef web UI + API server
 │   ├── zabbix-compose.yml               # Zabbix + PostgreSQL
 │   └── netbox-compose.yml               # Netbox DCIM + PostgreSQL + Redis
 ├── persistence/                         # TrueNAS post-init scripts
@@ -90,24 +96,32 @@ Custom Wazuh detection rules, Zeek network monitoring decoders, RITA beacon anal
 
 | Category | Rule IDs | Description |
 |----------|----------|-------------|
-| Windows FP Suppression | 100001-100015 | Tuned whitelist rules reducing false positives |
-| UniFi/UDM Network | 100100-100122 | Firewall blocks, IDS/IPS, Tor, threat management |
-| WiFi Attack Detection | 100130-100135 | Deauth floods, evil twin, PMKID, beacon anomalies |
+| Windows FP Suppression | 100001-100017 | Tuned whitelist rules reducing false positives |
+| UniFi/UDM Network | 100100-100137 | Firewall blocks, IDS/IPS, Tor, threat management, device offline |
+| CVE Detection | 100138-100142 | Symlink TOCTOU (CVE-2026-20677) on Linux + macOS |
 | DeepBlueCLI | 100150-100157 | Windows event log hunting — password spray, mimikatz, obfuscated PS, log clearing |
+| Encrypted DNS C2 | 100160-100166 | DoT/DoH/DoQ detection via Sysmon (Windows) |
 | RITA Beacons | 100200-100270 | C2 beacon scoring, blacklist contacts, long connections |
 | Zeek Network | 100300-100499 | Suspicious ports, DNS threats, HTTP anomalies, SSL issues, SSH brute force |
+| Zeek DNS C2 | 100500-100510 | Encrypted DNS detection (DoT/DoH/DoQ) via Zeek |
+| DNS Security | 100550-100604 | Domain intel matches, DNS bypass detection |
+| Iranian APT | 100800-100860 | Pioneer Kitten, Peach Sandstorm, MuddyWater TTPs |
+| WiFi Attack Detection | 100130-100135 | Deauth floods, evil twin, PMKID, beacon anomalies |
 
 ### Alerting Pipeline
 
 ```
 UDM Pro ──syslog──► Wazuh Manager ──► Discord (#wazuh-alerts)
-                             ▲
-Zeek ──logs──► Wazuh Agent ──┘
-                         ▲
-RITA ──JSON──► Wazuh ────┘──────────► Discord (#rita-alerts)
-                         ▲
+                             ▲    │
+Zeek ──logs──► Wazuh Agent ──┘    ├──► Shuffle SOAR (automated triage)
+                         ▲        ├──► MISP (IOC correlation)
+RITA ──JSON──► Wazuh ────┘────────├──► VirusTotal (FIM hash checks)
+                         ▲        └──► Discord (#rita-alerts)
 DeepBlueCLI ──log──► Wazuh Agent (Windows) ──► Wazuh Manager
   (Scheduled Task, every 15 min — Security + System log analysis)
+
+CyberChef API ◄── Shuffle workflows (decode/defang/extract IOCs)
+MISP ◄── VT enrichment (on-demand IOC lookup)
 ```
 
 ### Zeek Log Coverage
@@ -164,11 +178,14 @@ Automated deployment of an isolated red team / pentesting lab on Proxmox:
 
 ## Docker Services
 
-| Service | Composition | Ports | Purpose |
-|---------|------------|-------|---------|
-| Velociraptor | `velociraptor-compose.yml` | 8000, 8001, 8889 | DFIR endpoint visibility |
-| Zabbix | `zabbix-compose.yml` | 8081, 10051 | Infrastructure monitoring |
-| Netbox | `netbox-compose.yml` | 8080 | DCIM / asset management |
+| Service | Composition | Purpose |
+|---------|------------|---------|
+| Shuffle SOAR | `shuffle-compose.yml` | Security orchestration and automated response |
+| MISP | `misp-compose.yml` | Threat intelligence platform (VT enrichment enabled) |
+| CyberChef | `cyberchef-compose.yml` | Data analysis — decode, defang, extract IOCs |
+| Velociraptor | `velociraptor-compose.yml` | DFIR endpoint visibility |
+| Zabbix | `zabbix-compose.yml` | Infrastructure monitoring |
+| Netbox | `netbox-compose.yml` | DCIM / asset management |
 
 ---
 
@@ -201,13 +218,43 @@ TrueNAS SCALE overwrites the root filesystem on updates (A/B boot). Post-init sc
 
 ---
 
+## Integrations
+
+### Wazuh Integrations
+
+| Integration | Trigger | Purpose |
+|-------------|---------|---------|
+| VirusTotal | `syscheck` (FIM) alerts | Auto-check file hashes against VT on every file change |
+| MISP | Level 3+ alerts | IOC correlation — IPs, domains, hashes matched against threat intel |
+| Shuffle SOAR | Level 10+ alerts | Automated triage workflows — enrich, deduplicate, escalate |
+| Discord | Level 10+ / RITA rules | Real-time alert notifications to SOC channels |
+
+### MISP Enrichment Modules
+
+| Module | Purpose |
+|--------|---------|
+| `virustotal_public` | Hash/IP/domain lookup (rate-limited, free tier) |
+| `virustotal` | Full VT enrichment for MISP attributes |
+
+### Shuffle SOAR Workflows
+
+| Workflow | Trigger | Actions |
+|----------|---------|---------|
+| Alert Triage | Wazuh level 10+ | Enrich via MISP/VT, deduplicate, notify Discord |
+| CyberChef Decode | On-demand | Decode Base64/hex payloads, extract IOCs, defang URLs |
+
+---
+
 ## Technologies
 
 | Category | Tools |
 |----------|-------|
 | **SIEM** | Wazuh |
+| **SOAR** | Shuffle |
+| **Threat Intel** | MISP (VirusTotal enrichment) |
 | **NSM** | Zeek |
 | **DFIR** | Velociraptor |
+| **Data Analysis** | CyberChef (web UI + API) |
 | **Windows Event Log Hunting** | DeepBlueCLI (SANS) |
 | **Beacon Detection** | RITA, AC-Hunter |
 | **Vuln Scanning** | GVM/OpenVAS |
