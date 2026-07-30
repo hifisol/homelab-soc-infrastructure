@@ -1,0 +1,16 @@
+---
+# Example inventory - customize for your environment
+# Copy to hosts.yml (gitignored) and fill in real lab endpoint IPs
+
+all:
+  vars:
+    ansible_user: deploy-svc
+    ansible_ssh_private_key_file: ~/.ssh/deploy-svc
+    ansible_become: yes
+    ansible_become_method: sudo
+
+  children:
+    mde_linux:
+      hosts:
+        lab-endpoint-01:
+          ansible_host: 10.0.10.60

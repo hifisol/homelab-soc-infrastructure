@@ -81,10 +81,17 @@ homelab-soc-infrastructure/
 │   └── ensure-tailscale.sh
 ├── scripts/
 │   └── netbox-discovery.sh              # Infrastructure auto-discovery
+├── defender-endpoint-p2/                # MDE P2 onboarding/ASR/Graph API dev (see below)
 └── docs/
     ├── gvm-quickstart.md                # GVM/OpenVAS setup guide
     └── truenas-persistence.md           # TrueNAS service persistence guide
 ```
+
+---
+
+## Endpoint Protection (Defender for Endpoint P2)
+
+Dev/testing ground for Microsoft Defender for Endpoint P2 — onboarding automation, ASR rule tuning, and Graph API advanced-hunting export into this lab's Wazuh manager. See [`defender-endpoint-p2/README.md`](defender-endpoint-p2/README.md). Validated tooling here graduates into the separate client-facing `hifisol/defender-endpoint-p2` repo.
 
 ---
 

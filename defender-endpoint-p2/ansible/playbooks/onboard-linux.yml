@@ -1,0 +1,103 @@
+---
+# Onboard a lab Linux endpoint to Microsoft Defender for Endpoint P2.
+#
+# Requires: mdatp_onboard.json at vars.mde_onboarding_blob_path_local
+# (see ../vars/mde-defaults.yml.example)
+#
+# Usage:
+#   ansible-playbook -i inventory/hosts.yml playbooks/onboard-linux.yml
+
+- name: Onboard lab Linux endpoints to MDE P2
+  hosts: mde_linux
+  become: yes
+  vars_files:
+    - ../vars/mde-defaults.yml
+
+  tasks:
+    - name: Fail early if onboarding blob is missing
+      ansible.builtin.stat:
+        path: "{{ mde_onboarding_blob_path_local }}"
+      register: onboard_blob
+      delegate_to: localhost
+      run_once: true
+
+    - name: Assert onboarding blob exists
+      ansible.builtin.assert:
+        that: onboard_blob.stat.exists
+        fail_msg: >-
+          Missing {{ mde_onboarding_blob_path_local }} —
+          download it from Microsoft Defender portal (Settings > Endpoints > Onboarding)
+          before running this playbook.
+      delegate_to: localhost
+      run_once: true
+
+    - name: Install curl/gnupg dependencies
+      ansible.builtin.package:
+        name:
+          - curl
+          - gnupg
+        state: present
+
+    - name: Add Microsoft package signing key
+      ansible.builtin.get_url:
+        url: "https://packages.microsoft.com/keys/microsoft.asc"
+        dest: /tmp/microsoft.asc
+
+    - name: Dearmor Microsoft signing key
+      ansible.builtin.shell: |
+        gpg --dearmor < /tmp/microsoft.asc > /usr/share/keyrings/microsoft-prod.gpg
+      args:
+        creates: /usr/share/keyrings/microsoft-prod.gpg
+
+    - name: Add Microsoft Defender repo (Debian/Ubuntu family)
+      ansible.builtin.apt_repository:
+        repo: >-
+          deb [arch=amd64 signed-by=/usr/share/keyrings/microsoft-prod.gpg]
+          https://packages.microsoft.com/{{ ansible_distribution | lower }}/{{ ansible_distribution_version }}/{{ mde_repo_channel }}
+          {{ ansible_distribution_release }} main
+        filename: microsoft-mdatp
+        state: present
+      when: ansible_os_family == "Debian"
+
+    - name: Update apt cache
+      ansible.builtin.apt:
+        update_cache: yes
+      when: ansible_os_family == "Debian"
+
+    - name: Install mdatp
+      ansible.builtin.package:
+        name: mdatp
+        state: present
+
+    - name: Ensure onboarding directory exists
+      ansible.builtin.file:
+        path: /etc/opt/microsoft/mdatp
+        state: directory
+        mode: "0755"
+
+    - name: Copy onboarding blob
+      ansible.builtin.copy:
+        src: "{{ mde_onboarding_blob_path_local }}"
+        dest: "{{ mde_onboarding_blob_path_remote }}"
+        mode: "0600"
+      notify: restart mdatp
+
+    - name: Ensure mdatp service is enabled and running
+      ansible.builtin.systemd:
+        name: mdatp
+        enabled: yes
+        state: started
+
+    - name: Set real-time protection
+      ansible.builtin.command: "mdatp config real-time-protection --value {{ 'enabled' if mde_real_time_protection else 'disabled' }}"
+      changed_when: true
+
+    - name: Set cloud-delivered protection
+      ansible.builtin.command: "mdatp config cloud --value {{ 'enabled' if mde_cloud_delivered_protection else 'disabled' }}"
+      changed_when: true
+
+  handlers:
+    - name: restart mdatp
+      ansible.builtin.systemd:
+        name: mdatp
+        state: restarted

@@ -1,0 +1,28 @@
+---
+# Defender for Endpoint P2 (Dev) — Variables
+# Copy to mde-defaults.yml (gitignored) and customize for your environment
+
+# --- Onboarding ---
+# Download from Microsoft Defender portal: Settings > Endpoints > Onboarding
+mde_onboarding_blob_path_local: "~/mde-lab/mdatp_onboard.json"
+mde_onboarding_blob_path_remote: "/etc/opt/microsoft/mdatp/mdatp_onboard.json"
+
+# --- Package repo (Debian/Ubuntu family) ---
+mde_repo_channel: "prod"     # prod | insiders-fast | insiders-slow
+
+# --- Protection defaults ---
+mde_real_time_protection: true
+mde_cloud_delivered_protection: true
+mde_automatic_sample_submission: true
+mde_tamper_protection: true
+
+# --- Health check thresholds ---
+mde_health_required_fields:
+  - healthy
+  - licensed
+  - real_time_protection_enabled
+
+# --- Graph API (for advanced hunting -> Wazuh export testing) ---
+mde_tenant_id: "CHANGE_ME"
+mde_app_id: "CHANGE_ME"
+# mde_app_secret lives in vault.yml, not here

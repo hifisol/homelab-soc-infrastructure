@@ -11,6 +11,8 @@ ansible/vars/*.vault.yml
 # Actual inventory (use examples as templates)
 ansible/inventory/hosts.yml
 ansible/vars/ad-lab.yml
+defender-endpoint-p2/ansible/inventory/hosts.yml
+defender-endpoint-p2/ansible/vars/mde-defaults.yml
 
 # Ansible retry files
 *.retry

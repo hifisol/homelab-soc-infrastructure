@@ -1,0 +1,42 @@
+---
+# Verify MDE P2 onboarding/sensor health on lab endpoints.
+#
+# Usage:
+#   ansible-playbook -i inventory/hosts.yml playbooks/health-check.yml
+
+- name: MDE P2 health check (Linux)
+  hosts: mde_linux
+  become: yes
+  vars_files:
+    - ../vars/mde-defaults.yml
+  gather_facts: no
+
+  tasks:
+    - name: Query mdatp health (JSON)
+      ansible.builtin.command: mdatp health --output json
+      register: mdatp_health
+      changed_when: false
+      failed_when: false
+
+    - name: Parse health output
+      ansible.builtin.set_fact:
+        mde_health_parsed: "{{ mdatp_health.stdout | from_json }}"
+      when: mdatp_health.rc == 0
+
+    - name: Flag hosts where mdatp is unreachable
+      ansible.builtin.debug:
+        msg: "UNREACHABLE/NOT INSTALLED: {{ inventory_hostname }} — mdatp command failed (rc={{ mdatp_health.rc }})"
+      when: mdatp_health.rc != 0
+
+    - name: Flag hosts missing a required health field
+      ansible.builtin.debug:
+        msg: "UNHEALTHY: {{ inventory_hostname }} — field '{{ item }}' not true/present"
+      loop: "{{ mde_health_required_fields }}"
+      when:
+        - mdatp_health.rc == 0
+        - not (mde_health_parsed | selectattr('key', 'equalto', item) | list | length > 0)
+
+    - name: Report healthy hosts
+      ansible.builtin.debug:
+        msg: "OK: {{ inventory_hostname }} — onboarded and healthy"
+      when: mdatp_health.rc == 0
