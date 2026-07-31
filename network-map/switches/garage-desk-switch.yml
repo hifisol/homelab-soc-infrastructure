@@ -1,0 +1,15 @@
+---
+switch: garage-desk
+model: US 8 60W
+management_ip: 10.18.56.7
+location: garage
+ports:
+  7:
+    device: Garage (UniFi Protect camera)
+    interface: null
+    model: G3 Flex
+    ip: 10.18.121.29
+    uplink: FE
+    mode: access
+    vlans: [121]
+    notes: Confirmed via UniFi Protect device list, 2026-07-31.

@@ -1,0 +1,75 @@
+---
+# UniFi Protect device inventory on 10.18.121.0/24 (cameras, chime, doorbell,
+# NVR). Captured from the UniFi Protect device list on 2026-07-31. Port-level
+# mappings for these devices (where known) live in switches/.
+
+network: 10.18.121.0/24
+devices:
+  - name: basement
+    model: Camera G3 Flex
+    ip: null
+    mac: "78:45:58:3f:5e:21"
+    status: offline
+    parent: null
+
+  - name: UP Chime-2CFDC9
+    model: Chime
+    ip: 10.18.121.22
+    mac: "d8:b3:70:2c:fd:c9"
+    status: online
+    parent: Front-AP
+
+  - name: Garage
+    model: G3 Flex
+    ip: 10.18.121.29
+    mac: "74:ac:b9:00:20:b9"
+    status: online
+    uplink: FE
+    parent: Garage desk
+    parent_port: 7
+
+  - name: Nanycam
+    model: G3 Instant
+    ip: 10.18.121.20
+    mac: "74:ac:b9:9f:6a:7d"
+    status: online
+    parent: Front-AP
+
+  - name: G4 Doorbell
+    model: G4 Doorbell
+    ip: 10.18.121.30
+    mac: "e0:63:da:01:01:6d"
+    status: online
+    parent: Front-AP
+
+  - name: Backyard
+    model: G5 Turret Ultra
+    ip: 10.18.121.21
+    mac: "28:70:4e:9f:8f:51"
+    status: online
+    uplink: FE
+    parent: Basement switch
+    parent_port: 5
+
+  - name: Front Camera
+    model: G6 Turret
+    ip: 10.18.121.27
+    mac: "1c:0b:8b:96:37:9f"
+    status: online
+    uplink: FE
+    parent: Basement switch
+    parent_port: 6
+
+  - name: UNVR
+    model: Network Video Recorder
+    ip: null
+    mac: "68:d7:9a:56:f5:e8"
+    status: offline
+    parent: null
+
+  - name: Network Video Recorder
+    model: UNVR
+    ip: 10.18.121.2
+    mac: "68:d7:9a:56:f5:e9"
+    status: online
+    parent: UDM Pro

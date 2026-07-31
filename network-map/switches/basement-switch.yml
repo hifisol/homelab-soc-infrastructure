@@ -1,8 +1,29 @@
 ---
 switch: basement-switch
-model: CHANGE_ME
+model: USW Lite 16 PoE
+management_ip: 10.18.56.4
 location: basement
 ports:
+  5:
+    device: Backyard (UniFi Protect camera)
+    interface: null
+    model: G5 Turret Ultra
+    ip: 10.18.121.21
+    uplink: FE
+    mode: access
+    vlans: [121]
+    notes: Confirmed via UniFi Protect device list, 2026-07-31.
+
+  6:
+    device: Front Camera (UniFi Protect camera)
+    interface: null
+    model: G6 Turret
+    ip: 10.18.121.27
+    uplink: FE
+    mode: access
+    vlans: [121]
+    notes: Confirmed via UniFi Protect device list, 2026-07-31.
+
   12:
     device: PRM-PM-1
     interface: eth1 (renamed from nic1 on 2026-07-30)

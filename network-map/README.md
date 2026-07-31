@@ -9,14 +9,16 @@ to open the UniFi controller or re-run discovery every time.
 
 ```
 network-map/
-├── unifi-inventory.yml     # all UniFi-managed devices (switches, APs, etc.) and their base info
+├── unifi-inventory.yml     # UniFi network devices (switches, APs, etc.) on 10.18.56.0/24
+├── protect-inventory.yml   # UniFi Protect devices (cameras, chime, doorbell, NVR) on 10.18.121.0/24
 └── switches/
     └── <switch-name>.yml   # one file per physical switch, port-level mapping
 ```
 
-`unifi-inventory.yml` is the device list (name, model, IP, MAC, status) — pulled
-from the UniFi controller's device list. `switches/<name>.yml` goes one level
-deeper: which specific port on that switch has what plugged into it.
+The `*-inventory.yml` files are device lists (name, model, IP, MAC, status) —
+pulled from the UniFi controller/Protect device list. `switches/<name>.yml`
+goes one level deeper: which specific port on that switch has what plugged
+into it.
 
 ## Entry format
 
