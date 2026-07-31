@@ -1,0 +1,51 @@
+version: "3.8"
+
+services:
+
+  cassandra:
+    image: cassandra:{{ cassandra_version }}
+    container_name: thehive-cassandra
+    restart: unless-stopped
+    environment:
+      - MAX_HEAP_SIZE=2G
+      - HEAP_NEWSIZE=1G
+      - CASSANDRA_CLUSTER_NAME=thehive
+    volumes:
+      - {{ thehive_compose_dir }}/data/cassandra:/var/lib/cassandra
+    networks:
+      - thehive
+
+  cortex:
+    image: thehiveproject/cortex:{{ cortex_version }}
+    container_name: cortex
+    restart: unless-stopped
+    depends_on:
+      - cassandra
+    ports:
+      # Admin UI - localhost only; access via Twingate/Tailscale
+      - "127.0.0.1:{{ cortex_http_port }}:9001"
+    volumes:
+      - {{ thehive_compose_dir }}/application.conf.cortex:/etc/cortex/application.conf
+      - {{ thehive_compose_dir }}/data/cortex:/data
+    networks:
+      - thehive
+
+  thehive:
+    image: thehiveproject/thehive:{{ thehive_version }}
+    container_name: thehive
+    restart: unless-stopped
+    depends_on:
+      - cassandra
+      - cortex
+    ports:
+      # Admin UI - localhost only; access via Twingate/Tailscale
+      - "127.0.0.1:{{ thehive_http_port }}:9000"
+    volumes:
+      - {{ thehive_compose_dir }}/application.conf:/etc/thehive/application.conf
+      - {{ thehive_compose_dir }}/data/thehive:/opt/thp/thehive/files
+    networks:
+      - thehive
+
+networks:
+  thehive:
+    driver: bridge

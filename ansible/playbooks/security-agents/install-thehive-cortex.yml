@@ -1,0 +1,115 @@
+---
+- name: Install TheHive + Cortex (case management and alert enrichment) on docker-host
+  hosts: docker_hosts
+  become: yes
+  vars_files:
+    - ../../vars/thehive-cortex.yml
+
+  tasks:
+    - name: Update apt cache
+      ansible.builtin.apt:
+        update_cache: yes
+        cache_valid_time: 3600
+      tags: [thehive_cortex]
+
+    - name: Install Docker dependencies
+      ansible.builtin.apt:
+        name:
+          - curl
+          - gnupg
+          - apt-transport-https
+          - ca-certificates
+          - docker.io
+          - docker-compose-plugin
+          - python3-pip
+          - python3-docker
+        state: present
+      tags: [thehive_cortex]
+
+    - name: Enable and start Docker
+      ansible.builtin.systemd:
+        name: docker
+        enabled: yes
+        state: started
+      tags: [thehive_cortex]
+
+    - name: Create TheHive/Cortex compose directory
+      ansible.builtin.file:
+        path: "{{ thehive_compose_dir }}"
+        state: directory
+        mode: "0755"
+      tags: [thehive_cortex]
+
+    - name: Create TheHive/Cortex data directories
+      ansible.builtin.file:
+        path: "{{ thehive_compose_dir }}/{{ item }}"
+        state: directory
+        mode: "0777"
+      loop:
+        - data/cassandra
+        - data/thehive
+        - data/cortex
+      tags: [thehive_cortex]
+
+    - name: Deploy TheHive/Cortex Docker Compose file
+      ansible.builtin.template:
+        src: ../../templates/thehive-cortex-compose.yml
+        dest: "{{ thehive_compose_dir }}/docker-compose.yml"
+        owner: root
+        group: root
+        mode: "0644"
+      tags: [thehive_cortex]
+
+    - name: Deploy TheHive application config
+      ansible.builtin.template:
+        src: ../../templates/thehive-application.conf
+        dest: "{{ thehive_compose_dir }}/application.conf"
+        owner: root
+        group: root
+        mode: "0644"
+      tags: [thehive_cortex]
+
+    - name: Deploy Cortex application config
+      ansible.builtin.template:
+        src: ../../templates/cortex-application.conf
+        dest: "{{ thehive_compose_dir }}/application.conf.cortex"
+        owner: root
+        group: root
+        mode: "0644"
+      tags: [thehive_cortex]
+
+    - name: Start TheHive/Cortex stack
+      community.docker.docker_compose_v2:
+        project_src: "{{ thehive_compose_dir }}"
+        state: present
+      tags: [thehive_cortex]
+
+    - name: Wait for TheHive to become available
+      ansible.builtin.wait_for:
+        port: "{{ thehive_http_port }}"
+        host: 127.0.0.1
+        delay: 20
+        timeout: 180
+      tags: [thehive_cortex]
+
+    - name: Wait for Cortex to become available
+      ansible.builtin.wait_for:
+        port: "{{ cortex_http_port }}"
+        host: 127.0.0.1
+        delay: 20
+        timeout: 180
+      tags: [thehive_cortex]
+
+    - name: Display post-installation instructions
+      ansible.builtin.debug:
+        msg:
+          - "TheHive/Cortex have been deployed via Docker!"
+          - "Next steps (manual - not yet automated):"
+          - "1. Log into TheHive UI via Twingate/Tailscale, create org + analyst users"
+          - "2. Log into Cortex UI, enable VirusTotal + AbuseIPDB analyzers with API keys"
+          - "3. Link Cortex to TheHive (Organization -> Cortex Servers)"
+          - "4. Configure Graylog/Wazuh alert forwarding -> TheHive webhook, if applicable"
+          - "5. Fire a test alert, confirm it lands as a TheHive alert with enrichment"
+          - "TheHive UI: https://{{ ansible_host }}:{{ thehive_http_port }}"
+          - "Cortex UI:  https://{{ ansible_host }}:{{ cortex_http_port }}"
+      tags: [thehive_cortex]

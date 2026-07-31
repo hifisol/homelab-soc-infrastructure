@@ -82,8 +82,12 @@ homelab-soc-infrastructure/
 ├── scripts/
 │   └── netbox-discovery.sh              # Infrastructure auto-discovery
 ├── defender-endpoint-p2/                # MDE P2 onboarding/ASR/Graph API dev (see below)
+├── network-map/                         # Switch port -> device/VLAN mappings (fills in gradually)
+│   └── switches/
+│       └── basement-switch.yml
 └── docs/
     ├── gvm-quickstart.md                # GVM/OpenVAS setup guide
+    ├── thehive-cortex-quickstart.md      # TheHive/Cortex case management + enrichment
     └── truenas-persistence.md           # TrueNAS service persistence guide
 ```
 

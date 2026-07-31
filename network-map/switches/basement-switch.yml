@@ -1,0 +1,18 @@
+---
+switch: basement-switch
+model: CHANGE_ME
+location: basement
+ports:
+  12:
+    device: PRM-PM-1
+    interface: eth1 (renamed from nic1 on 2026-07-30)
+    mac: "b4:b5:2f:ca:5a:f7"
+    mode: trunk
+    vlans: [1, 40, 60, 65, 100, 120, 121, 130, 170, 180, 185, 195, 198, 199, 200, 201]
+    notes: >
+      Confirmed 2026-07-30 via passive tcpdump on PM-1's nic1 (now eth1; 15s
+      capture of vlan/arp/broadcast traffic) — saw tagged traffic for all of
+      the listed VLANs, so this is effectively an all-VLANs trunk. PM-1 uses
+      this port for a new bridge (vmbr3 -> vmbr3v195, 10.18.195.11/24) giving
+      it direct PRM-Net access. See ~/docs/prm-pm-1.md for the PM-1-side
+      config, including the nic0/nic1 -> eth0/eth1 rename.

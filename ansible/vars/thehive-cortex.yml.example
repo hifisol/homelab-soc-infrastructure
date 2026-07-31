@@ -1,0 +1,16 @@
+---
+# Variables for TheHive + Cortex (case management and alert enrichment)
+# Copy to thehive-cortex.yml and customize for your environment
+
+thehive_version: "5.4"
+cortex_version: "3.1"
+cassandra_version: "4.1"
+thehive_compose_dir: "/opt/thehive"
+thehive_http_port: 9001 # Admin UI - localhost/Twingate/Tailscale only
+cortex_http_port: 9002 # Admin UI - localhost/Twingate/Tailscale only
+thehive_secret: "CHANGE_ME" # pwgen -N 1 -s 64
+cortex_secret: "CHANGE_ME" # pwgen -N 1 -s 64
+
+# Cortex analyzer API keys
+cortex_virustotal_key: "CHANGE_ME"
+cortex_abuseipdb_key: "CHANGE_ME"
