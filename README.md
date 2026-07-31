@@ -91,7 +91,63 @@ homelab-soc-infrastructure/
 
 ## Endpoint Protection (Defender for Endpoint P2)
 
-Dev/testing ground for Microsoft Defender for Endpoint P2 — onboarding automation, ASR rule tuning, and Graph API advanced-hunting export into this lab's Wazuh manager. See [`defender-endpoint-p2/README.md`](defender-endpoint-p2/README.md). Validated tooling here graduates into the separate client-facing `hifisol/defender-endpoint-p2` repo.
+Dev/testing ground for Microsoft Defender for Endpoint Plan 2 — onboarding automation, ASR rule tuning, and Graph API advanced-hunting export into this lab's Wazuh manager, before it's productized as a client offering in the separate `hifisol/defender-endpoint-p2` repo. Full playbooks and docs live in [`defender-endpoint-p2/`](defender-endpoint-p2/).
+
+### Why P2
+
+P1 covers next-gen AV and manual response actions. P2 is the SKU that unlocks the pieces this actually automates:
+
+| Capability | P1 | P2 |
+|---|---|---|
+| EDR (Endpoint Detection & Response) | No | Yes |
+| Automated Investigation & Remediation (AIR) | No | Yes |
+| Threat & Vulnerability Management (TVM) | No | Yes |
+| Advanced hunting (KQL) + custom detections | No | Yes |
+| Full API access (advanced hunting, alerts, machine actions) | Limited | Yes |
+
+### Onboarding & Health Pipeline
+
+```
+Defender Portal ──(onboarding package)──► mdatp_onboard.json (local, gitignored)
+                                                  │
+                                                  ▼
+                             onboard-linux.yml (Ansible) ──► mdatp install + onboard
+                                                  │
+                                                  ▼
+                             health-check.yml ──► mdatp health --output json
+                                                  │
+                                                  ▼
+                                 Healthy / Unhealthy / Unreachable report
+```
+
+Windows endpoints onboard through existing GPO/Intune device management — this pipeline only pushes onboarding for Linux/macOS, and verifies health across all OSes.
+
+### ASR Rule Baseline (rollout target)
+
+Same rule set slated for client rollout — deploy in Audit mode, review advanced-hunting data for false positives, then flip to Block one rule at a time:
+
+| Rule | Recommended State |
+|---|---|
+| Block executable content from email client/webmail | Block |
+| Block Office apps from creating child processes | Block |
+| Block Office apps from creating executable content | Block |
+| Block Office apps from injecting into other processes | Block |
+| Block JS/VBScript from launching downloaded executables | Block |
+| Block execution of potentially obfuscated scripts | Block |
+| Block Win32 API calls from Office macros | Block |
+| Block credential stealing from LSASS | Block |
+| Block process creation from PSExec/WMI commands | Audit (site-dependent — breaks some RMM/backup tooling) |
+| Block untrusted/unsigned processes on USB | Audit (site-dependent) |
+| Use advanced protection against ransomware | Block |
+| Block persistence through WMI event subscription | Block |
+
+### Graph API → Wazuh (planned)
+
+Not yet wired up. The plan is a scheduled pull of `DeviceAlertEvents`/`DeviceEvents` via the Microsoft Graph Security API (client-credentials app registration, `AdvancedQuery.Read.All` + `Alert.Read.All` scopes), forwarded into Wazuh as a custom log source — the same integration shape as the existing RITA/Zeek → Wazuh bridges below.
+
+### Status
+
+Scaffold stage — no lab tenant licensed yet, nothing validated end-to-end against a real endpoint. Open items tracked in [`defender-endpoint-p2/docs/lab-notes.md`](defender-endpoint-p2/docs/lab-notes.md).
 
 ---
 
