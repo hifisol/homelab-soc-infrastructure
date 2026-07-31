@@ -1,0 +1,91 @@
+---
+# UniFi-managed device inventory on the .56 network (UDM Pro's own subnet,
+# separate from the numbered PRM-* VLANs). Captured from the UniFi controller
+# device list on 2026-07-31. Not a full port map (see switches/) - this is
+# just what devices exist and their base info.
+
+network: 10.18.56.0/24
+devices:
+  - name: UDM Pro
+    model: UDM Pro
+    ip: 10.18.56.1
+    mac: "60:22:32:a9:42:e5"
+    status: online
+    uplink: GbE
+
+  - name: Garage desk
+    model: US 8 60W
+    ip: 10.18.56.7
+    mac: "e0:63:da:8d:3f:6f"
+    status: up to date
+    uplink: GbE
+
+  - name: TOR-1
+    model: USW 24 PoE
+    ip: 10.18.56.5
+    mac: "68:d7:9a:52:7e:cf"
+    status: up to date
+    uplink: GbE
+
+  - name: Office desk
+    model: USW Flex Mini
+    ip: 10.18.56.8
+    mac: "74:83:c2:ff:8f:e7"
+    status: up to date
+    uplink: GbE
+
+  - name: Mini-Flex
+    model: USW Flex Mini
+    ip: 10.18.56.10
+    mac: "24:5a:4c:18:90:0b"
+    status: offline
+    uplink: null
+
+  - name: Living Room
+    model: USW Flex Mini
+    ip: 10.18.56.9
+    mac: "74:ac:b9:ab:d9:2b"
+    status: up to date
+    uplink: GbE
+
+  - name: Basement switch
+    model: USW Lite 16 PoE
+    ip: 10.18.56.4
+    mac: "d0:21:f9:44:24:6c"
+    status: up to date
+    uplink: GbE
+    notes: >
+      Confirmed 1GbE-only, port-mirroring capable (1:1 single mirror session
+      only - Ubiquiti controller limitation). See switches/basement-switch.yml
+      for the port-level mapping (currently just port 12 -> PM-1 nic1/eth1).
+      User is considering purchasing a second USW-Lite-16-PoE ($199) as an
+      additional switch to get more SPAN/VLAN port capacity beyond what one
+      switch's single mirror session can provide.
+
+  - name: Garage-AP
+    model: AC Pro
+    ip: 10.18.56.114
+    mac: "e0:63:da:3c:48:d8"
+    status: up to date
+    uplink: meshing
+
+  - name: Kitchen-AP
+    model: U6 Lite
+    ip: 10.18.56.110
+    mac: "f4:92:bf:af:de:84"
+    status: up to date
+    uplink: GbE
+
+  - name: Front-AP
+    model: U6 LR
+    ip: 10.18.56.112
+    mac: "78:45:58:e9:f1:0d"
+    status: up to date
+    uplink: GbE
+
+  - name: USP Plug
+    model: USP Plug
+    ip: 10.18.56.221
+    mac: "fc:ec:da:76:d6:d7"
+    status: offline
+    uplink: meshing
