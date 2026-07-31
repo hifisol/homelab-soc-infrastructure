@@ -11,6 +11,7 @@ to open the UniFi controller or re-run discovery every time.
 network-map/
 ├── unifi-inventory.yml     # UniFi network devices (switches, APs, etc.) on 10.18.56.0/24
 ├── protect-inventory.yml   # UniFi Protect devices (cameras, chime, doorbell, NVR) on 10.18.121.0/24
+├── topology.yml            # full parent/child uplink tree, from the UniFi topology view
 └── switches/
     └── <switch-name>.yml   # one file per physical switch, port-level mapping
 ```

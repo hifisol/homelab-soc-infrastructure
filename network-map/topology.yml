@@ -1,0 +1,52 @@
+---
+# Full network topology tree, captured from the UniFi controller's topology
+# view on 2026-07-31. Complements unifi-inventory.yml/protect-inventory.yml
+# (device lists) and switches/*.yml (per-port mappings) with the actual
+# parent/child uplink chain.
+
+root: Astound Broadband
+tree:
+  UDM Pro:
+    - Network Video Recorder
+    - TOR-1 (USW 24 PoE, STP priority 32768):
+        - PRM-NXS-1
+        - PRM-HNTR-1
+        - Basement switch (USW Lite 16 PoE, STP priority 32768):
+            - PRM-PM-1 (UniFi shows a warning icon here - checked 2026-07-31, no
+              real fault found: 0 interface errors, all bridge ports forwarding,
+              nothing relevant in dmesg. Likely just UniFi's generic
+              "unrecognized device" flag for a Proxmox host client.)
+            - bc:24:11:83:71:c2 (PM-1's domainintel LXC veth MAC - same warning
+              icon, same conclusion: pings fine, container running, no real issue)
+            - b4:b5:2f:ca:5a:f7 (PM-1's eth1 - this is port 12, see switches/basement-switch.yml)
+            - bc:24:11:f2:b6:d9 (unidentified)
+            - bc:24:11:85:83:7d (unidentified)
+            - Living Room (USW Flex Mini):
+                - Nintendo Switch
+            - Front-AP (U6 LR):
+                - Nanycam
+                - UP Chime-2CFDC9
+                - G4 Doorbell
+                - USP Plug (warning icon)
+                - Ellie's tablet
+            - Kitchen-AP (U6 Lite):
+                - Smart Plug
+                - DESK-TOP ac:2b
+                - Garage-AP (AC Pro):
+                    - Mini-Flex (USW Flex Mini, warning icon)
+                    - Garage desk (US 8 60W, STP priority 32768):
+                        - Garage (UniFi Protect camera, port 7)
+        - Office desk (USW Flex Mini):
+            - "(selected/highlighted device, name not captured)"
+            - DESKTOP-QJMPGO2
+            - DORBGML9K4 b5:f4
+        - PRM-RDNT-1
+
+notes: >
+  Corrects an earlier assumption: Garage desk switch was documented in
+  switches/garage-desk-switch.yml as if directly attached to the network -
+  it's actually downstream of Garage-AP, which is downstream of Kitchen-AP,
+  which is downstream of Basement switch, which is downstream of TOR-1.
+  Basement switch's own uplink to TOR-1 is separate from port 12 (which goes
+  to PM-1's eth1, not to TOR-1) - port 12 being trunked with every VLAN is
+  Basement switch's own port config, not simply inherited uplink traffic.
